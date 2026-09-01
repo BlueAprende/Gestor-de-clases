@@ -619,10 +619,18 @@ function App() {
     if(!name) return;
     let teacher = teachers.find(t => t.name.toLowerCase() === name.toLowerCase());
     if(!teacher){
-      teacher = {id:Date.now(), name, colorIdx: teachers.length % COLORS.length};
-      const newTeachers = [...teachers, teacher];
-      setTeachers(newTeachers);
-      await writeData('blue/teachers', newTeachers);
+      // Recargar la lista completa de profes desde Firebase antes de agregar,
+      // así nunca sobrescribimos ni borramos profes que ya existen.
+      let cur = null;
+      try { cur = await readData('blue/teachers'); } catch(e) {}
+      cur = Array.isArray(cur) ? cur : (cur && typeof cur === 'object' ? Object.values(cur) : []);
+      teacher = cur.find(t => t.name.toLowerCase() === name.toLowerCase());
+      if(!teacher){
+        teacher = {id:Date.now(), name, colorIdx: cur.length % COLORS.length};
+        cur = [...cur, teacher];
+      }
+      setTeachers(cur);
+      await writeData('blue/teachers', cur);
     }
     setCurTeacher(teacher);
     setScreen('teacher');
