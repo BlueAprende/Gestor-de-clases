@@ -434,7 +434,7 @@ function App() {
   const [newCls, setNewCls] = useState({student:'', date: getTodayDate(), hour:'7:00', teacherId: null, status:'pending', doneDate:null, duration:null, repeat:false, repeatWeeks:4, direccion:'', notas:''});
   const [assigningId, setAssigningId] = useState(null);
   const [editingTeacher, setEditingTeacher] = useState(null);
-  const [editForm, setEditForm] = useState({name:'', telefono:'', notas:'', fechaInicio:''});
+  const [editForm, setEditForm] = useState({name:'', telefono:'', notas:'', fechaInicio:'', pagoFijo:''});
   const [selectedTeacherId, setSelectedTeacherId] = useState(null);
   const [searchText, setSearchText] = useState('');
   const [editingClass, setEditingClass] = useState(null);
@@ -905,7 +905,8 @@ function App() {
     if(editForm.telefono.trim() && !/^[\d\s()+-]{7,20}$/.test(editForm.telefono.trim())) errs.telefono = 'Teléfono inválido (solo números, +, -, espacios)';
     setTeacherErrors(errs);
     if(Object.keys(errs).length > 0) return;
-    const newTeachers = teachers.map(t => t.id === editingTeacher.id ? {...t, name: editForm.name.trim(), telefono: editForm.telefono.trim(), notas: editForm.notas.trim(), fechaInicio: editForm.fechaInicio || t.fechaInicio || ''} : t);
+    const pagoFijo = editForm.pagoFijo === '' ? (t.pagoFijo || 0) : (parseInt(editForm.pagoFijo) || 0);
+    const newTeachers = teachers.map(t => t.id === editingTeacher.id ? {...t, name: editForm.name.trim(), telefono: editForm.telefono.trim(), notas: editForm.notas.trim(), fechaInicio: editForm.fechaInicio || t.fechaInicio || '', pagoFijo} : t);
     setTeachers(newTeachers);
     await writeData('blue/teachers', newTeachers);
     logAction('Editó profesor', editForm.name.trim());
@@ -1063,6 +1064,31 @@ function App() {
     }
     notify(esMesPagado(student, yyyymm) ? 'Mes marcado como pendiente' : 'Pago registrado ✅');
   };
+
+  // ===== Pago a profesores =====
+  // Cuánto le cobra Blue al papá por una clase (según el precio del estudiante)
+  const precioPapáDeClase = (clase) => {
+    const s = students.find(x => x.name.trim().toLowerCase() === String(clase.student || '').trim().toLowerCase());
+    return s ? (s.price || 0) : 0;
+  };
+  // Cuánto le paga Blue al profesor por UNA hora de esa clase
+  const pagoProfePorHora = (profe, clase) => {
+    // Tarifa fija manual (ej. Juli = 75) anula la regla
+    if (profe && profe.pagoFijo > 0) return profe.pagoFijo;
+    // Juliana (Juli) siempre cobra $75
+    if (profe && /juli/.test((profe.name || '').toLowerCase())) return 75;
+    // Regla automática por precio del papá: a $92 paga $80, el resto paga $70
+    const precio = clase ? precioPapáDeClase(clase) : 0;
+    if (precio >= 92000) return 80;
+    return 70;
+  };
+  // Cuánto le pagó Blue a un profe por todas sus clases dictadas (suma)
+  const totalPagadoProfe = (profe) => {
+    const done = classes.filter(c => c.status === 'done' && String(c.teacherId) === String(profe.id));
+    return done.reduce((s, c) => s + parseDurationToHours(c.duration) * pagoProfePorHora(profe, c), 0);
+  };
+  // ¿El profe tiene alguna clase cobrada al papá en $92? (para saber si aplica tarifa de $80)
+  const tieneClases92 = (profe) => classes.some(c => String(c.teacherId) === String(profe.id) && precioPapáDeClase(c) >= 92000);
 
   // ===== Respaldo de datos (exportar / importar JSON) =====
   const exportBackup = () => {
@@ -1775,6 +1801,25 @@ function App() {
               ),
               t.notas && React.createElement('div', {style:{fontSize:12, marginTop:8, fontStyle:'italic', color:'var(--muted)'}}, `📌 ${t.notas}`)
             ),
+            React.createElement('div', {className:'card', style:{background:'var(--stat-bg)'}},
+              React.createElement('h3', null, '💰 Blue le paga'),
+              t.pagoFijo > 0
+                ? React.createElement('div', {style:{fontSize:18, fontWeight:'bold', color:'#1D9E75'}}, `$${t.pagoFijo} por hora`)
+                : (() => {
+                    const precios = [...new Set(classes.filter(c => String(c.teacherId) === String(t.id)).map(c => precioPapáDeClase(c)).filter(Boolean))].sort((a,b)=>a-b);
+                    if (!precios.length) return React.createElement('div', {style:{fontSize:13, color:'var(--muted)'}}, 'Sin clases asignadas todavía.');
+                    return React.createElement('div', null,
+                      precios.map(p => React.createElement('div', {key:p, style:{display:'flex', justifyContent:'space-between', padding:'4px 0', borderBottom:'1px solid var(--card-border)', fontSize:13}},
+                        React.createElement('span', null, `Clases cobradas a $${(p/1000).toFixed(0)}k al papá`),
+                        React.createElement('strong', {style:{color:'#1D9E75'}}, `$${pagoProfePorHora(t, classes.find(c=>String(c.teacherId)===String(t.id) && precioPapáDeClase(c)===p))}/h`)
+                      )),
+                      React.createElement('div', {style:{display:'flex', justifyContent:'space-between', paddingTop:8, fontSize:14, fontWeight:'bold'}},
+                        React.createElement('span', null, `Total ganado por ${formatHours(classes.filter(c=>c.status==='done'&&String(c.teacherId)===String(t.id)).reduce((s,c)=>s+parseDurationToHours(c.duration),0))} dictadas`),
+                        React.createElement('span', {style:{color:'#1D9E75'}}, `$${Math.round(totalPagadoProfe(t)).toLocaleString(undefined,{maximumFractionDigits:0})}`)
+                      )
+                    );
+                  })()
+            ),
             React.createElement('div', {className:'card'},
               React.createElement('h3', null, '🗓️ Calendario de clases'),
               React.createElement(TeacherCalendar, {teacher:t, classes, month:tProfileMonth, setMonth:setTProfileMonth, selectedDay:tProfileDay, setSelectedDay:setTProfileDay})
@@ -1877,13 +1922,14 @@ function App() {
                       React.createElement('span', {style:{...STATUS_STYLES[status.kind], color:'#fff', fontSize:11, fontWeight:600, padding:'2px 10px', borderRadius:99}}, status.kind==='proxima' ? `En ${status.sub}` : status.label)
                     ),
                     React.createElement('div', null, `${myC.length} clases · ${myC.filter(c=>c.status==='done').length} dictadas · ${formatHours(horasDictadasTeacher)}`),
+                    React.createElement('div', {style:{fontSize:12, color:'#1D9E75'}}, `💰 Blue le paga: ${t.pagoFijo > 0 ? `$${t.pagoFijo}/h` : (tieneClases92(t) ? '$80/h con cobro $92 · $70/h normal' : '$70/h')}`),
                     t.fechaInicio && React.createElement('div', {style:{fontSize:11, color:'var(--muted)'}}, `Desde: ${t.fechaInicio}`)
                   )
                 ),
                 React.createElement('div', {style:{display:'flex', gap:4, flexWrap:'wrap'}},
                   React.createElement('button', {onClick:()=>{setViewTeacherProfile(t); setTProfileMonth(()=>{const d=new Date(); d.setDate(1); return d;}); setTProfileDay(null);}}, '👁️ Ver perfil'),
                   waNumber && React.createElement('a', {href:`https://wa.me/${waNumber}`, target:'_blank', rel:'noopener noreferrer', style:{textDecoration:'none'}}, React.createElement('button', null, '💬')),
-                  React.createElement('button', {onClick:()=>{setEditingTeacher(t); setEditForm({name:t.name, telefono:t.telefono||'', notas:t.notas||'', fechaInicio:t.fechaInicio||''}); setTeacherErrors({});}}, '✏️'),
+                  React.createElement('button', {onClick:()=>{setEditingTeacher(t); setEditForm({name:t.name, telefono:t.telefono||'', notas:t.notas||'', fechaInicio:t.fechaInicio||'', pagoFijo: String(t.pagoFijo ?? '')}); setTeacherErrors({});}}, '✏️'),
                   React.createElement('button', {onClick:()=>deleteTeacher(t.id), className:'danger'}, '🗑️')
                 )
               ),
@@ -1898,6 +1944,9 @@ function App() {
               React.createElement('label', {style:{fontSize:12, color:'var(--muted)'}}, 'Trabaja con nosotros desde:'),
               React.createElement('input', {type:'date', value:editForm.fechaInicio, onChange:e=>setEditForm({...editForm, fechaInicio:e.target.value})}),
               React.createElement('textarea', {value:editForm.notas, onChange:e=>setEditForm({...editForm, notas:e.target.value}), placeholder:'Notas privadas (solo las ven las coordinadoras)', rows:2}),
+              React.createElement('label', {style:{fontSize:12, color:'var(--muted)'}}, '💰 Pago por hora a este profesor (solo si es fijo, ej: Juli = 75):'),
+              React.createElement('input', {type:'number', placeholder:'Dejar vacío usa la regla automática ($70, $80 si cobra $92)', value:editForm.pagoFijo, onChange:e=>setEditForm({...editForm, pagoFijo:e.target.value})}),
+              React.createElement('div', {style:{fontSize:11, color:'var(--muted)', marginTop:-4}}, 'Automático: $70/h normalmente y $80/h cuando se le cobra $92 al papá.'),
               React.createElement('button', {className:'primary', onClick:updateTeacher}, 'Guardar'),
               React.createElement('button', {onClick:()=>{setEditingTeacher(null); setTeacherErrors({});}}, 'Cancelar')
             )
