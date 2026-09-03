@@ -1680,6 +1680,11 @@ function App() {
               React.createElement('div', {style:{fontSize:12, color:'var(--muted)'}}, `${c.date} (${DAYS_F[c.day]}) ${c.hour}`),
               teacher && React.createElement('div', {style:{fontSize:11, color:'#1D9E75'}}, `👤 ${teacher.name}`),
               React.createElement('div', {style:{marginTop:4}}, statusBadge(c))
+            ),
+            React.createElement('div', {style:{display:'flex', gap:4, alignItems:'center', flexWrap:'wrap'}},
+              isActiveClass(c) && React.createElement('button', {onClick:()=>setRescheduleCls({id:c.id, date:c.date, hour:c.hour}), title:'Reprogramar (cambiar fecha/hora)'}, '🔄'),
+              (c.status === 'pending' || c.status === 'cancelada') && React.createElement('button', {onClick:()=>aplazarClass(c.id), title:'Marcar como aplazada (con fecha)'}, '🎗'),
+              isActiveClass(c) && React.createElement('button', {onClick:()=>cancelClass(c.id), title:'Cancelar esta clase', style:{background:'#fde8e8', color:'#b91c1c', borderColor:'#fecaca'}}, '✖')
             )
           )
         );
@@ -2276,8 +2281,10 @@ function App() {
                     React.createElement('button', {onClick:()=>{setDurationModal(null); setDurDescripcion(''); setDurInicio(''); setDurFin('');}, style:{flex:1}}, 'Cancelar')
                   )
                 ),
-                c.status === 'pending' && !(durationModal === c.id) && React.createElement('div', {style:{marginTop:6}},
-                  React.createElement('button', {className:'success', onClick:()=>openDurationModal(c.id), style:{padding:'4px 10px'}}, '✅ Marcar dictada')
+                c.status === 'pending' && !(durationModal === c.id) && React.createElement('div', {style:{display:'flex', gap:6, marginTop:6, flexWrap:'wrap'}},
+                  React.createElement('button', {className:'success', onClick:()=>openDurationModal(c.id), style:{padding:'4px 10px'}}, '✅ Marcar dictada'),
+                  React.createElement('button', {onClick:()=>setRescheduleCls({id:c.id, date:c.date, hour:c.hour}), title:'Reprogramar (cambiar fecha/hora)', style:{padding:'4px 10px'}}, '🔄'),
+                  React.createElement('button', {onClick:()=>cancelClass(c.id), title:'Cancelar esta clase', style:{background:'#fde8e8', color:'#b91c1c', borderColor:'#fecaca', padding:'4px 10px'}}, '✖ Cancelar')
                 ),
                 c.status === 'done' && React.createElement('div', {style:{fontSize:12, color:'var(--muted)', marginTop:4, lineHeight:1.6}},
                   `⏱ Duración: ${c.duration || '?'} h${c.horaInicio&&c.horaFin ? ` (${c.horaInicio} - ${c.horaFin})` : ''}${c.descripcion ? ` · 📝 "${c.descripcion}"` : ''}${c.doneDate ? ` · dictada el ${c.doneDate}` : ''}${c.transporte ? ' · 🚗 transporte' : ''}`
