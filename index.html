@@ -282,6 +282,7 @@ function isActiveClass(c) { return c.status !== 'done' && c.status !== 'cancelad
 function statusBadge(c) {
   if (c.status === 'done') return React.createElement('span', {className:'badge-green'}, `✅ Dictada el ${c.doneDate} · Duración: ${c.duration || '?'} h`);
   if (c.status === 'cancelada') return React.createElement('span', {className:'badge-gray', style:{background:'#fde8e8', color:'#b91c1c'}}, `❌ Cancelada${c.cancelDate ? ' el ' + c.cancelDate : ''}`);
+  if (c.status === 'aplazada') return React.createElement('span', {className:'badge-gray', style:{background:'#dbeafe', color:'#1d4ed8'}}, `🎗 Aplazada${c.aplazadaDate ? ' el ' + c.aplazadaDate : ''}`);
   return React.createElement('span', {className:'badge-gray'}, '⏳ Pendiente');
 }
 
@@ -466,6 +467,7 @@ function App() {
   const toastTimerRef = useRef(null);
   const [logs, setLogs] = useState([]);
   const [logPage, setLogPage] = useState(1);
+  const [histFilterActor, setHistFilterActor] = useState('all');
   const [calMonth, setCalMonth] = useState(() => { const d = new Date(); d.setDate(1); return d; });
   const [calSelectedDay, setCalSelectedDay] = useState(null);
   const [fbState, setFbState] = useState(fbReady ? 'connecting' : 'local');
@@ -798,6 +800,27 @@ function App() {
     logAction('Canceló clase', `${c.student} · ${c.date} ${c.hour}`);
     notify('Clase cancelada');
     showUndo('Cancelación deshecha', async () => {
+      setClasses(prevClasses);
+      await writeData('blue/classes', prevClasses);
+    });
+  };
+
+  const aplazarClass = async (id) => {
+    const c = classes.find(c => c.id === id);
+    if(!c) return;
+    if(c.status === 'done') { alert('Esa clase ya está dictada. No se puede aplazar.'); return; }
+    if(c.status === 'aplazada') { alert('Esa clase ya está aplazada.'); return; }
+    const entrada = prompt('¿Qué día se aplazó la clase? (formato: AAAA-MM-DD)', getTodayDate());
+    if(!entrada) return;
+    const dia = entrada.trim();
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(dia)) { alert('Formato de fecha inválido. Usa AAAA-MM-DD'); return; }
+    const prevClasses = classes;
+    const updated = classes.map(x => x.id === id ? {...x, status: 'aplazada', aplazadaDate: dia} : x);
+    setClasses(updated);
+    await writeData('blue/classes', updated);
+    logAction('Aplazó clase', `${c.student} · ${c.date} ${c.hour} → ${dia}`);
+    notify('Clase marcada como aplazada 🎗');
+    showUndo('Aplazamiento deshecho', async () => {
       setClasses(prevClasses);
       await writeData('blue/classes', prevClasses);
     });
@@ -1584,6 +1607,7 @@ function App() {
                   : React.createElement('button', {disabled:true, title:'Agrega el teléfono del profesor en "✏️ Editar profesor" para poder recordarle', style:{opacity:0.35, cursor:'not-allowed'}}, '🔔')
               ),
               isActiveClass(c) && React.createElement('button', {onClick:()=>setRescheduleCls({id:c.id, date:c.date, hour:c.hour}), title:'Reprogramar (cambiar fecha/hora)'}, '🔄'),
+              (c.status === 'pending' || c.status === 'cancelada') && React.createElement('button', {onClick:()=>aplazarClass(c.id), title:'Marcar como aplazada (con fecha)'}, '🎗'),
               isActiveClass(c) && React.createElement('button', {onClick:()=>cancelClass(c.id), title:'Cancelar esta clase', style:{background:'#fde8e8', color:'#b91c1c', borderColor:'#fecaca'}}, '✖'),
               React.createElement('button', {onClick:()=>setEditingClass(c)}, '✏️'),
               React.createElement('button', {onClick:()=>setAssigningId(assigningId===c.id?null:c.id)}, '👥'),
@@ -1708,6 +1732,13 @@ function App() {
           React.createElement('select', {value:filterTeacher, onChange:e=>setFilterTeacher(e.target.value), style:{width:'auto', marginBottom:0}},
             React.createElement('option', {value:'all'}, '👥 Todos los profes'),
             teachers.map(t => React.createElement('option', {key:t.id, value:t.id}, t.name))
+          ),
+          React.createElement('select', {value:filterStatus, onChange:e=>setFilterStatus(e.target.value), style:{width:'auto', marginBottom:0}},
+            React.createElement('option', {value:'todos'}, '📋 Todos los estados'),
+            React.createElement('option', {value:'pending'}, '⏳ Pendientes'),
+            React.createElement('option', {value:'done'}, '✅ Dictadas'),
+            React.createElement('option', {value:'cancelada'}, '❌ Canceladas'),
+            React.createElement('option', {value:'aplazada'}, '🎗 Aplazadas')
           ),
           React.createElement('button', {onClick:sendTomorrowReminders, title:'Abre WhatsApp con las clases pendientes de mañana de cada profe'}, '🔔 Recordar mañana')
         ),
@@ -2110,10 +2141,18 @@ function App() {
       })(),
       tab === 'historial' && (() => {
         const perPage = 20;
-        const totalPages = Math.max(1, Math.ceil(logs.length / perPage));
-        const pageLogs = logs.slice((logPage-1)*perPage, logPage*perPage);
+        const actores = [...new Set(logs.map(l => l.actor).filter(Boolean))].sort();
+        const logsFilt = histFilterActor === 'all' ? logs : logs.filter(l => l.actor === histFilterActor);
+        const totalPages = Math.max(1, Math.ceil(logsFilt.length / perPage));
+        const pageLogs = logsFilt.slice((logPage-1)*perPage, logPage*perPage);
         return React.createElement('div', null,
           logs.length === 0 && React.createElement('div', {className:'card'}, 'Todavía no hay acciones registradas.'),
+          logs.length > 0 && React.createElement('div', {className:'row', style:{marginBottom:12}},
+            React.createElement('select', {value:histFilterActor, onChange:e=>setHistFilterActor(e.target.value), style:{width:'100%'}},
+              React.createElement('option', {value:'all'}, '👥 Todos (profes y coordinadores)'),
+              actores.map(a => React.createElement('option', {key:a, value:a}, a === 'Sistema' ? '⚙️ ' + a : '👤 ' + a))
+            )
+          ),
           pageLogs.map(l => React.createElement('div', {key:l.id, className:'card', style:{padding:'8px 12px'}},
             React.createElement('div', {style:{fontSize:13}},
               React.createElement('strong', null, l.actor), ` ${l.action}`, l.detail ? ` — ${l.detail}` : ''
