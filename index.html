@@ -465,6 +465,7 @@ function App() {
   const [tProfileMonth, setTProfileMonth] = useState(()=>{const d=new Date(); d.setDate(1); return d;});
   const [tProfileDay, setTProfileDay] = useState(null);
   const [profileStudentFilter, setProfileStudentFilter] = useState('all');
+  const [collapsePendientes, setCollapsePendientes] = useState(false);
   const [undoStash, setUndoStash] = useState(null);
   const undoTimerRef = useRef(null);
   const [toast, setToast] = useState(null);
@@ -1093,6 +1094,12 @@ function App() {
   };
   // ¿El profe tiene alguna clase cobrada al papá en $92? (para saber si aplica tarifa de $80)
   const tieneClases92 = (profe) => classes.some(c => String(c.teacherId) === String(profe.id) && precioPapáDeClase(c) >= 92000);
+  // Formatea un valor EN MILES a pesos colombianos (ej. 70 -> "$70 mil", 1200 -> "$1,2 M")
+  const fmtMiles = (miles) => {
+    const n = Number(miles) || 0;
+    if (n >= 1000) return `$${(n / 1000).toLocaleString('es-CO', { maximumFractionDigits: 1 })} M`;
+    return `$${Math.round(n)} mil`;
+  };
 
   // ===== Respaldo de datos (exportar / importar JSON) =====
   const exportBackup = () => {
@@ -1817,18 +1824,18 @@ function App() {
             React.createElement('div', {className:'card', style:{background:'var(--stat-bg)'}},
               React.createElement('h3', null, '💰 Blue le paga'),
               t.pagoFijo > 0
-                ? React.createElement('div', {style:{fontSize:18, fontWeight:'bold', color:'#1D9E75'}}, `$${t.pagoFijo} por hora`)
+                ? React.createElement('div', {style:{fontSize:18, fontWeight:'bold', color:'#1D9E75'}}, `${fmtMiles(t.pagoFijo)} por hora`)
                 : (() => {
                     const precios = [...new Set(classes.filter(c => String(c.teacherId) === String(t.id)).map(c => precioPapáDeClase(c)).filter(Boolean))].sort((a,b)=>a-b);
                     if (!precios.length) return React.createElement('div', {style:{fontSize:13, color:'var(--muted)'}}, 'Sin clases asignadas todavía.');
                     return React.createElement('div', null,
                       precios.map(p => React.createElement('div', {key:p, style:{display:'flex', justifyContent:'space-between', padding:'4px 0', borderBottom:'1px solid var(--card-border)', fontSize:13}},
-                        React.createElement('span', null, `Clases cobradas a $${(p/1000).toFixed(0)}k al papá`),
-                        React.createElement('strong', {style:{color:'#1D9E75'}}, `$${pagoProfePorHora(t, classes.find(c=>String(c.teacherId)===String(t.id) && precioPapáDeClase(c)===p))}/h`)
+                        React.createElement('span', null, `Clases cobradas a $${(p/1000).toFixed(0)} mil al papá`),
+                        React.createElement('strong', {style:{color:'#1D9E75'}}, `${fmtMiles(pagoProfePorHora(t, classes.find(c=>String(c.teacherId)===String(t.id) && precioPapáDeClase(c)===p)))}`+'/h')
                       )),
                       React.createElement('div', {style:{display:'flex', justifyContent:'space-between', paddingTop:8, fontSize:14, fontWeight:'bold'}},
                         React.createElement('span', null, `Total ganado por ${formatHours(classes.filter(c=>c.status==='done'&&String(c.teacherId)===String(t.id)).reduce((s,c)=>s+parseDurationToHours(c.duration),0))} dictadas`),
-                        React.createElement('span', {style:{color:'#1D9E75'}}, `$${Math.round(totalPagadoProfe(t)).toLocaleString(undefined,{maximumFractionDigits:0})}`)
+                        React.createElement('span', {style:{color:'#1D9E75'}}, fmtMiles(totalPagadoProfe(t)))
                       )
                     );
                   })()
@@ -1838,12 +1845,18 @@ function App() {
               React.createElement(TeacherCalendar, {teacher:t, classes, month:tProfileMonth, setMonth:setTProfileMonth, selectedDay:tProfileDay, setSelectedDay:setTProfileDay})
             ),
             React.createElement('div', {className:'card'},
-              React.createElement('h3', null, '🕒 Próximas clases'),
-              pendientes.length === 0 && React.createElement('div', {style:{fontSize:13, color:'var(--muted)'}}, 'No tiene clases pendientes.'),
-              pendientes.map(c => React.createElement('div', {key:c.id, style:{display:'flex', justifyContent:'space-between', gap:8, padding:'6px 0', borderBottom:'1px solid var(--card-border)', flexWrap:'wrap'}},
-                React.createElement('div', null, React.createElement('strong', null, c.student), React.createElement('div', {style:{fontSize:12, color:'var(--muted)'}}, `${c.date} (${DAYS_F[c.day]}) ${c.hour}${c.direccion ? ' · 📍 '+c.direccion : ''}${c.notas ? ' · 📝 '+c.notas : ''}`)),
-                statusBadge(c)
-              ))
+              React.createElement('div', {onClick:()=>setCollapsePendientes(!collapsePendientes), style:{display:'flex', justifyContent:'space-between', alignItems:'center', cursor:'pointer', userSelect:'none'}},
+                React.createElement('h3', {style:{margin:0}}, `🕒 Próximas clases (${pendientes.length})`),
+                React.createElement('span', {style:{color:'var(--muted)', fontSize:16}}, collapsePendientes ? '▸' : '▾')
+              ),
+              pendientes.length === 0 && React.createElement('div', {style:{fontSize:13, color:'var(--muted)', marginTop:8, marginLeft:2}}, 'No tiene clases pendientes.'),
+              pendientes.length > 0 && !collapsePendientes && React.createElement('div', {style:{marginTop:8}},
+                pendientes.map(c => React.createElement('div', {key:c.id, style:{display:'flex', justifyContent:'space-between', gap:8, padding:'6px 0', borderBottom:'1px solid var(--card-border)', flexWrap:'wrap'}},
+                  React.createElement('div', null, React.createElement('strong', null, c.student), React.createElement('div', {style:{fontSize:12, color:'var(--muted)'}}, `${c.date} (${DAYS_F[c.day]}) ${c.hour}${c.direccion ? ' · 📍 '+c.direccion : ''}${c.notas ? ' · 📝 '+c.notas : ''}`)),
+                  statusBadge(c)
+                ))
+              ),
+              pendientes.length > 0 && collapsePendientes && React.createElement('div', {style:{fontSize:13, color:'var(--muted)', marginTop:8}}, 'Plegado. Toca para ver.')
             ),
             React.createElement('div', {className:'card'},
               React.createElement('h3', null, '📋 Horario semanal'),
@@ -1944,7 +1957,7 @@ function App() {
                       React.createElement('span', {style:{...STATUS_STYLES[status.kind], color:'#fff', fontSize:11, fontWeight:600, padding:'2px 10px', borderRadius:99}}, status.kind==='proxima' ? `En ${status.sub}` : status.label)
                     ),
                     React.createElement('div', null, `${myC.length} clases · ${myC.filter(c=>c.status==='done').length} dictadas · ${formatHours(horasDictadasTeacher)}`),
-                    React.createElement('div', {style:{fontSize:12, color:'#1D9E75'}}, `💰 Blue le paga: ${t.pagoFijo > 0 ? `$${t.pagoFijo}/h` : (tieneClases92(t) ? '$80/h con cobro $92 · $70/h normal' : '$70/h')}`),
+                    React.createElement('div', {style:{fontSize:12, color:'#1D9E75'}}, `💰 Blue le paga: ${t.pagoFijo > 0 ? `${fmtMiles(t.pagoFijo)}/h` : (tieneClases92(t) ? '80 mil/h con cobro $92 · 70 mil/h normal' : '70 mil/h')}`),
                     t.fechaInicio && React.createElement('div', {style:{fontSize:11, color:'var(--muted)'}}, `Desde: ${t.fechaInicio}`)
                   )
                 ),
