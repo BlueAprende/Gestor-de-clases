@@ -538,6 +538,8 @@ function App() {
   const [durHour, setDurHour] = useState(1);
   const [durMin, setDurMin] = useState(0);
   const [durDescripcion, setDurDescripcion] = useState('');
+  const [durInicio, setDurInicio] = useState('');
+  const [durFin, setDurFin] = useState('');
 
   // Carga inicial con timeout
   useEffect(() => {
@@ -905,6 +907,8 @@ function App() {
     setDurHour(h);
     setDurMin(m);
     setDurDescripcion(cls && cls.descripcion ? cls.descripcion : '');
+    setDurInicio(cls && cls.horaInicio ? cls.horaInicio : (cls && cls.hour ? cls.hour : ''));
+    setDurFin(cls && cls.horaFin ? cls.horaFin : '');
     setDurationModal(classId);
   };
 
@@ -913,15 +917,26 @@ function App() {
     const classId = durationModal;
     const classToMark = classes.find(c => c.id === classId);
     if(!classToMark) return;
-    const duracion = `${durHour}:${String(durMin).padStart(2,'0')}`;
+    // Si el profe puso hora de inicio y fin, calculamos la duración a partir de ellas
+    let duracion = `${durHour}:${String(durMin).padStart(2,'0')}`;
+    const inpStart = durInicio.trim();
+    const inpEnd = durFin.trim();
+    const timeToMin = (t) => { const p = t.split(':'); return (parseInt(p[0])||0)*60 + (parseInt(p[1])||0); };
+    if (inpStart && inpEnd && /^\d{1,2}:\d{2}$/.test(inpStart) && /^\d{1,2}:\d{2}$/.test(inpEnd)) {
+      let diffMin = timeToMin(inpEnd) - timeToMin(inpStart);
+      if (diffMin < 0) diffMin += 24*60;
+      duracion = `${Math.floor(diffMin/60)}:${String(diffMin%60).padStart(2,'0')}`;
+    }
     const doneDate = getTodayDate();
-    const updated = classes.map(c => c.id === classId ? {...c, status: 'done', doneDate, duration: duracion, descripcion: durDescripcion.trim()} : c);
+    const updated = classes.map(c => c.id === classId ? {...c, status: 'done', doneDate, duration: duracion, descripcion: durDescripcion.trim(), horaInicio: inpStart, horaFin: inpEnd} : c);
     setClasses(updated);
     await writeData('blue/classes', updated);
-    logAction('Registró clase dictada', `${classToMark.student} · ${duracion}`);
+    logAction('Registró clase dictada', `${classToMark.student} · ${duracion}${inpStart&&inpEnd?` (${inpStart}-${inpEnd})`:''}`);
     setDurationModal(null);
     setDurDescripcion('');
-    alert(`Clase de ${classToMark.student} registrada con duración ${duracion}`);
+    setDurInicio('');
+    setDurFin('');
+    alert(`Clase de ${classToMark.student} registrada con duración ${duracion}${inpStart&&inpEnd?` (${inpStart} - ${inpEnd})`:''}`);
   };
 
   // Marcar/desmarcar que una clase requiere transporte (visible para la coordinadora)
@@ -1372,7 +1387,18 @@ function App() {
           React.createElement('div', null, React.createElement('strong', null, c.student), ` · ${c.date} ${c.hour}`),
           c.direccion && React.createElement('div', {style:{fontSize:12, color:'var(--muted)', marginTop:2}}, `📍 ${c.direccion}`),
           durationModal === c.id ? React.createElement('div', {style:{marginTop:8}},
-            React.createElement('div', {style:{fontSize:12, marginBottom:6}}, '¿Cuánto duró la clase?'),
+            React.createElement('div', {style:{fontSize:12, marginBottom:6}}, '🕐 ¿A qué hora empezó y terminó la clase? (opcional)'),
+            React.createElement('div', {className:'grid2'},
+              React.createElement('div', null,
+                React.createElement('div', {style:{fontSize:12, color:'var(--muted)', marginBottom:2}}, 'Empezó'),
+                React.createElement('input', {type:'time', value:durInicio, onChange:e=>setDurInicio(e.target.value), style:{width:'100%', fontFamily:'inherit', fontSize:14, padding:8, borderRadius:8, border:'1px solid #ccc'}})
+              ),
+              React.createElement('div', null,
+                React.createElement('div', {style:{fontSize:12, color:'var(--muted)', marginBottom:2}}, 'Terminó'),
+                React.createElement('input', {type:'time', value:durFin, onChange:e=>setDurFin(e.target.value), style:{width:'100%', fontFamily:'inherit', fontSize:14, padding:8, borderRadius:8, border:'1px solid #ccc'}})
+              )
+            ),
+            React.createElement('div', {style:{fontSize:12, marginBottom:6, marginTop:10}}, '¿Cuánto duró la clase?'),
             React.createElement('div', {className:'grid2'},
               React.createElement('select', {value:durHour, onChange:e=>setDurHour(parseInt(e.target.value))},
                 [0,1,2,3,4].map(h => React.createElement('option', {key:h, value:h}, `${h} h`))
@@ -1391,7 +1417,7 @@ function App() {
             }),
             React.createElement('div', {className:'row', style:{marginTop:8}},
               React.createElement('button', {className:'primary', onClick:confirmDuration, style:{flex:1}}, `Confirmar ${durHour}:${String(durMin).padStart(2,'0')}`),
-              React.createElement('button', {onClick:()=>{setDurationModal(null); setDurDescripcion('');}, style:{flex:1}}, 'Cancelar')
+              React.createElement('button', {onClick:()=>{setDurationModal(null); setDurDescripcion(''); setDurInicio(''); setDurFin('');}, style:{flex:1}}, 'Cancelar')
             )
           ) : React.createElement('div', {className:'row', style:{marginTop:8}},
               React.createElement('button', {className:'success', onClick:()=>openDurationModal(c.id), style:{flex:1}}, '✅ Registrar como dictada'),
@@ -1400,7 +1426,7 @@ function App() {
         )),
         doneClasses.length > 0 && React.createElement('div', {className:'card'},
           React.createElement('h4', null, 'Clases ya dictadas'),
-          doneClasses.map(c => React.createElement('div', {key:c.id}, `${c.student} · ${c.date} (${c.doneDate}) · Duración: ${c.duration || '?'} h`))
+          doneClasses.map(c => React.createElement('div', {key:c.id, style:{padding:'4px 0'}}, `${c.student} · ${c.date} (${c.doneDate}) · ${c.horaInicio&&c.horaFin ? `${c.horaInicio} - ${c.horaFin} · ` : ''}Duración: ${c.duration || '?'} h`))
         )
       ),
       profTab === 'disponibilidad' && React.createElement('div', {className:'card'},
@@ -1709,7 +1735,7 @@ function App() {
             dictadas.length > 0 && React.createElement('div', {className:'card'},
               React.createElement('h3', null, '✅ Últimas dictadas'),
               dictadas.slice(0,10).map(c => React.createElement('div', {key:c.id, style:{display:'flex', justifyContent:'space-between', gap:8, padding:'6px 0', borderBottom:'1px solid var(--card-border)', flexWrap:'wrap'}},
-                React.createElement('div', null, React.createElement('strong', null, c.student), React.createElement('div', {style:{fontSize:12, color:'var(--muted)'}}, `${c.date} ${c.hour} · ${c.duration||'?'} h${c.descripcion ? ' · 📝 '+c.descripcion : ''}`)),
+                React.createElement('div', null, React.createElement('strong', null, c.student), React.createElement('div', {style:{fontSize:12, color:'var(--muted)'}}, `${c.date} ${c.hour} · ${c.duration||'?'} h${c.horaInicio&&c.horaFin ? ` (${c.horaInicio} - ${c.horaFin})` : ''}${c.descripcion ? ' · 📝 '+c.descripcion : ''}`)),
                 React.createElement('span', {style:{fontSize:12, color:'#1D9E75'}}, '✅')
               ))
             )
@@ -1915,7 +1941,12 @@ function App() {
                   React.createElement('span', {style:{marginLeft:8}}, c.status==='done' ? '✅' : c.status==='cancelada' ? '❌' : '⏳')
                 ),
                 c.status === 'pending' && durationModal === c.id && React.createElement('div', {style:{marginTop:8, borderTop:'1px solid var(--card-border)', paddingTop:8}},
-                  React.createElement('div', {style:{fontSize:12, marginBottom:6}}, '¿Cuánto duró la clase?'),
+                  React.createElement('div', {style:{fontSize:12, marginBottom:6}}, '🕐 ¿A qué hora empezó y terminó la clase? (opcional)'),
+                  React.createElement('div', {className:'grid2'},
+                    React.createElement('div', null, React.createElement('div', {style:{fontSize:12, color:'var(--muted)', marginBottom:2}}, 'Empezó'), React.createElement('input', {type:'time', value:durInicio, onChange:e=>setDurInicio(e.target.value), style:{width:'100%', fontFamily:'inherit', fontSize:14, padding:8, borderRadius:8, border:'1px solid #ccc'}})),
+                    React.createElement('div', null, React.createElement('div', {style:{fontSize:12, color:'var(--muted)', marginBottom:2}}, 'Terminó'), React.createElement('input', {type:'time', value:durFin, onChange:e=>setDurFin(e.target.value), style:{width:'100%', fontFamily:'inherit', fontSize:14, padding:8, borderRadius:8, border:'1px solid #ccc'}}))
+                  ),
+                  React.createElement('div', {style:{fontSize:12, margin:'10px 0 6px'}}, '¿Cuánto duró la clase?'),
                   React.createElement('div', {className:'grid2'},
                     React.createElement('select', {value:durHour, onChange:e=>setDurHour(parseInt(e.target.value))}, [0,1,2,3,4].map(h => React.createElement('option', {key:h, value:h}, `${h} h`))),
                     React.createElement('select', {value:durMin, onChange:e=>setDurMin(parseInt(e.target.value))}, [0,30].map(m => React.createElement('option', {key:m, value:m}, `${m} min`)))
@@ -1924,14 +1955,14 @@ function App() {
                   React.createElement('textarea', {value:durDescripcion, onChange:e=>setDurDescripcion(e.target.value), placeholder:'Ej: repasamos multiplicación...', rows:2, style:{width:'100%', fontFamily:'inherit', fontSize:14, padding:8, borderRadius:8, border:'1px solid #ccc', resize:'vertical'}}),
                   React.createElement('div', {className:'row', style:{marginTop:8}},
                     React.createElement('button', {className:'primary', onClick:confirmDuration, style:{flex:1}}, `Confirmar ${durHour}:${String(durMin).padStart(2,'0')}`),
-                    React.createElement('button', {onClick:()=>{setDurationModal(null); setDurDescripcion('');}, style:{flex:1}}, 'Cancelar')
+                    React.createElement('button', {onClick:()=>{setDurationModal(null); setDurDescripcion(''); setDurInicio(''); setDurFin('');}, style:{flex:1}}, 'Cancelar')
                   )
                 ),
                 c.status === 'pending' && !(durationModal === c.id) && React.createElement('div', {style:{marginTop:6}},
                   React.createElement('button', {className:'success', onClick:()=>openDurationModal(c.id), style:{padding:'4px 10px'}}, '✅ Marcar dictada')
                 ),
                 c.status === 'done' && React.createElement('div', {style:{fontSize:12, color:'var(--muted)', marginTop:4, lineHeight:1.6}},
-                  `⏱ Duración: ${c.duration || '?'} h${c.descripcion ? ` · 📝 "${c.descripcion}"` : ''}${c.doneDate ? ` · dictada el ${c.doneDate}` : ''}${c.transporte ? ' · 🚗 transporte' : ''}`
+                  `⏱ Duración: ${c.duration || '?'} h${c.horaInicio&&c.horaFin ? ` (${c.horaInicio} - ${c.horaFin})` : ''}${c.descripcion ? ` · 📝 "${c.descripcion}"` : ''}${c.doneDate ? ` · dictada el ${c.doneDate}` : ''}${c.transporte ? ' · 🚗 transporte' : ''}`
                 )
               );
             })
