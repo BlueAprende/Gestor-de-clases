@@ -430,7 +430,11 @@ function App() {
   const [profTab, setProfTab] = useState('resumen');
   const [tCalMonth, setTCalMonth] = useState(()=>{const d=new Date(); d.setDate(1); return d;});
   const [tCalDay, setTCalDay] = useState(null);
-  const [newCls, setNewCls] = useState({student:'', date: getTodayDate(), hour:'7:00', teacherId: null, status:'pending', doneDate:null, duration:null, repeat:false, repeatWeeks:4, direccion:'', notas:''});
+  const [newCls, setNewCls] = useState({student:'', date: getTodayDate(), hour:'7:00', teacherId: null, status:'pending', doneDate:null, duration:null, repeat:false, repeatWeeks:4, direccion:'', notas:'', materia:''});
+  const [materias, setMaterias] = useState([]);
+  const [showMateriasManager, setShowMateriasManager] = useState(false);
+  const [newMateria, setNewMateria] = useState({nombre:'', color:'#4f6ef2'});
+  const MATERIA_COLORS = ['#4f6ef2','#1D9E75','#d97706','#dc2626','#8b5cf6','#06b6d4','#db2777','#65a30d','#ea580c','#0d9488'];
   const [assigningId, setAssigningId] = useState(null);
   const [editingTeacher, setEditingTeacher] = useState(null);
   const [editForm, setEditForm] = useState({name:'', telefono:'', notas:'', fechaInicio:''});
@@ -446,6 +450,7 @@ function App() {
   const [editingStudent, setEditingStudent] = useState(null);
   const [editStudentForm, setEditStudentForm] = useState({name:'', price:''});
   const [billingSubTab, setBillingSubTab] = useState('ninos');
+  const [reportMonth, setReportMonth] = useState(() => { const d = new Date(); d.setDate(1); return d; });
   const [durationModal, setDurationModal] = useState(null);
   const [darkMode, setDarkMode] = useState(() => {
     try { return localStorage.getItem('blue_dark') === '1'; } catch(e) { return false; }
@@ -559,10 +564,12 @@ function App() {
         let a = await readData('blue/avail') || {};
         let s = await readData('blue/students') || [];
         let lg = await readData('blue/log') || [];
+        let mt = await readData('blue/materias') || [];
         t = Array.isArray(t) ? t : Object.values(t);
         c = Array.isArray(c) ? c : Object.values(c);
         s = Array.isArray(s) ? s : Object.values(s);
         lg = Array.isArray(lg) ? lg : Object.values(lg);
+        mt = Array.isArray(mt) ? mt : Object.values(mt);
         // Migrar clases sin status y sin duration
         let changed = false;
         const migrated = c.map(cls => {
@@ -572,7 +579,7 @@ function App() {
           return updated;
         });
         if (changed) { await writeData('blue/classes', migrated); c = migrated; }
-        if (mounted) { setTeachers(t); setClasses(c); setAvail(a); setStudents(s); setLogs(lg); setError(null); }
+        if (mounted) { setTeachers(t); setClasses(c); setAvail(a); setStudents(s); setLogs(lg); setMaterias(mt); setError(null); }
       } catch(err) { if(mounted) setError(err.message); }
       finally { if(mounted) setLoading(false); }
     }
@@ -590,7 +597,8 @@ function App() {
       const u3 = listenData('blue/avail', v => { if(v) setAvail(v); });
       const u4 = listenData('blue/students', v => { setStudents(v ? (Array.isArray(v)?v:Object.values(v)) : []); });
       const u5 = listenData('blue/log', v => { setLogs(v ? (Array.isArray(v)?v:Object.values(v)) : []); });
-      unsubs = [u1, u2, u3, u4, u5];
+      const u6 = listenData('blue/materias', v => { setMaterias(v ? (Array.isArray(v)?v:Object.values(v)) : []); });
+      unsubs = [u1, u2, u3, u4, u5, u6];
     });
     return () => { unsubs.forEach(fn => fn && fn()); };
   }, []);
@@ -691,7 +699,8 @@ function App() {
         transporte: false,
         recurringId: null,
         direccion: newCls.direccion.trim(),
-        notas: newCls.notas.trim()
+        notas: newCls.notas.trim(),
+        materia: newCls.materia
       };
       const updated = [...classes, newClass];
       setClasses(updated);
@@ -723,7 +732,8 @@ function App() {
           transporte: false,
           recurringId,
           direccion: newCls.direccion.trim(),
-          notas: newCls.notas.trim()
+          notas: newCls.notas.trim(),
+          materia: newCls.materia
         });
       }
       if (nuevas.length === 0) {
@@ -736,7 +746,7 @@ function App() {
       logAction('Agregó clases recurrentes', `${nuevas[0].student} · ${nuevas.length} semanas`);
       alert(`Se crearon ${nuevas.length} clase(s) semanal(es)${omitidas > 0 ? ` (se omitieron ${omitidas} por conflicto de horario)` : ''}.`);
     }
-    setNewCls({student:'', date: getTodayDate(), hour:'7:00', teacherId: null, status:'pending', doneDate:null, duration:null, repeat:false, repeatWeeks:4, direccion:'', notas:''});
+    setNewCls({student:'', date: getTodayDate(), hour:'7:00', teacherId: null, status:'pending', doneDate:null, duration:null, repeat:false, repeatWeeks:4, direccion:'', notas:'', materia:''});
     setClassErrors({});
     setSelectedTeacherId(null);
   };
@@ -979,7 +989,7 @@ function App() {
     if(!newStudent.name.trim()) { notify("El nombre del estudiante es obligatorio", "error"); return; }
     const precio = parseFloat(newStudent.price);
     if(isNaN(precio) || precio < 0) { notify("Ingresa un precio por hora válido", "error"); return; }
-    const student = { id: Date.now(), name: newStudent.name.trim(), price: precio };
+    const student = { id: Date.now(), name: newStudent.name.trim(), price: precio, pagos: {} };
     const updated = [...students, student];
     setStudents(updated);
     await writeData('blue/students', updated);
@@ -1013,9 +1023,63 @@ function App() {
     });
   };
 
+  // ===== Materias =====
+  const materiaInfo = (id) => materias.find(m => String(m.id) === String(id)) || null;
+  const materiaColorOf = (id) => (materiaInfo(id) || {}).color || '#9ca3af';
+  const materiaNameOf = (id) => (materiaInfo(id) || {}).nombre || 'Sin materia';
+  const addMateria = async () => {
+    const nom = newMateria.nombre.trim();
+    if(!nom) { notify('Escribe el nombre de la materia', 'error'); return; }
+    const materia = { id: Date.now(), nombre: nom, color: newMateria.color };
+    const updated = [...materias, materia];
+    setMaterias(updated);
+    await writeData('blue/materias', updated);
+    logAction('Agregó materia', nom);
+    notify('Materia agregada ✅');
+    setNewMateria({nombre:'', color: MATERIA_COLORS[materias.length % MATERIA_COLORS.length]});
+  };
+  const deleteMateria = async (id) => {
+    const materia = materias.find(m => m.id === id);
+    if(!materia) return;
+    const prev = materias;
+    const updated = materias.filter(m => m.id !== id);
+    setMaterias(updated);
+    await writeData('blue/materias', updated);
+    logAction('Eliminó materia', materia.nombre);
+    showUndo(`Materia "${materia.nombre}" eliminada`, async () => {
+      setMaterias(prev);
+      await writeData('blue/materias', prev);
+    });
+  };
+
+  // ===== Pagos / deudas =====
+  const costoEstudianteMes = (student, yyyymm) => {
+    const done = classes.filter(c => c.status === 'done' && (c.date || '').startsWith(yyyymm) && c.student.trim().toLowerCase() === student.name.trim().toLowerCase());
+    const horas = done.reduce((sum, c) => sum + parseDurationToHours(c.duration), 0);
+    return horas * (student.price || 0);
+  };
+  const esMesPagado = (student, yyyymm) => !!(student.pagos && student.pagos[yyyymm] && student.pagos[yyyymm].pagado);
+  const toggleMesPagado = async (student, yyyymm) => {
+    if (esMesPagado(student, yyyymm)) {
+      const { [yyyymm]: omitido, ...resto } = student.pagos || {};
+      const prev = students;
+      const updated = students.map(s => s.id === student.id ? {...s, pagos: resto} : s);
+      setStudents(updated);
+      await writeData('blue/students', updated);
+      logAction('Marcó mes pendiente de pago', `${student.name} · ${yyyymm}`);
+    } else {
+      const prev = students;
+      const updated = students.map(s => s.id === student.id ? {...s, pagos: {...(s.pagos||{}), [yyyymm]: {pagado:true, fecha:new Date().toISOString()}}} : s);
+      setStudents(updated);
+      await writeData('blue/students', updated);
+      logAction('Registró pago de mes', `${student.name} · ${yyyymm}`);
+    }
+    notify(esMesPagado(student, yyyymm) ? 'Mes marcado como pendiente' : 'Pago registrado ✅');
+  };
+
   // ===== Respaldo de datos (exportar / importar JSON) =====
   const exportBackup = () => {
-    const data = { teachers, classes, avail, students, log: logs, exportedAt: new Date().toISOString() };
+    const data = { teachers, classes, avail, students, log: logs, materias, exportedAt: new Date().toISOString() };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -1040,12 +1104,14 @@ function App() {
         const ns = toArr(data.students);
         const nl = toArr(data.log);
         const na = (data.avail && typeof data.avail === 'object') ? data.avail : {};
-        setTeachers(nt); setClasses(nc); setStudents(ns); setLogs(nl); setAvail(na);
+        const nm = toArr(data.materias);
+        setTeachers(nt); setClasses(nc); setStudents(ns); setLogs(nl); setAvail(na); setMaterias(nm);
         writeData('blue/teachers', nt);
         writeData('blue/classes', nc);
         writeData('blue/students', ns);
         writeData('blue/log', nl);
         writeData('blue/avail', na);
+        writeData('blue/materias', nm);
         notify(`Respaldo restaurado ✅ (${nc.length} clases)`);
       } catch(err) {
         notify('No se pudo restaurar: ' + err.message, 'error');
@@ -1537,6 +1603,7 @@ function App() {
             React.createElement('div', null,
               React.createElement('strong', null, c.student),
               c.recurringId && React.createElement('span', {style:{fontSize:12, marginLeft:6}}, '🔁'),
+              c.materia && React.createElement('span', {style:{marginLeft:8, padding:'1px 8px', borderRadius:999, fontSize:11, color:'#fff', background: materiaColorOf(c.materia)}}, materiaNameOf(c.materia)),
               React.createElement('div', null, `${c.date} (${DAYS_F[c.day]}) ${c.hour}`),
               teacher && React.createElement('div', null, `👤 ${teacher.name}`),
               c.direccion && React.createElement('div', {style:{fontSize:12, color:'var(--muted)'}}, `📍 ${c.direccion}`),
@@ -1574,7 +1641,11 @@ function App() {
               React.createElement('input', {type:'time', value:editingClass.hour, onChange:e=>setEditingClass({...editingClass, hour:e.target.value}), step:300})
             ),
             React.createElement('input', {placeholder:'📍 Dirección (opcional)', value:editingClass.direccion||'', onChange:e=>setEditingClass({...editingClass, direccion:e.target.value})}),
-            React.createElement('button', {className:'primary', onClick:updateClass}, 'Guardar cambios')
+            React.createElement('select', {value:editingClass.materia||'', onChange:e=>setEditingClass({...editingClass, materia:e.target.value}), style:{marginTop:8, marginBottom:0}},
+              React.createElement('option', {value:''}, '📚 Materia (opcional)'),
+              materias.map(m => React.createElement('option', {key:m.id, value:m.id}, m.nombre))
+            ),
+            React.createElement('button', {className:'primary', onClick:updateClass, style:{marginTop:8}}, 'Guardar cambios')
           ),
           rescheduleCls?.id === c.id && React.createElement('div', {style:{marginTop:8, borderTop:'1px solid var(--card-border)', paddingTop:8}},
             React.createElement('div', {style:{fontWeight:'bold', marginBottom:6}}, '🔄 Reprogramar clase'),
@@ -1660,6 +1731,27 @@ function App() {
           ),
           React.createElement('input', {placeholder:'📍 Dirección donde es la clase (opcional)', value:newCls.direccion, onChange:e=>setNewCls({...newCls, direccion:e.target.value}), style:{marginTop:10}}),
           React.createElement('textarea', {placeholder:'📝 Notas (opcional): temas, material, información del estudiante...', value:newCls.notas, onChange:e=>setNewCls({...newCls, notas:e.target.value}), rows:2, style:{marginTop:8, resize:'vertical'}}),
+          React.createElement('div', {style:{display:'flex', alignItems:'center', gap:8, marginTop:8}},
+            React.createElement('select', {value:newCls.materia, onChange:e=>setNewCls({...newCls, materia:e.target.value}), style:{flex:1, marginBottom:0}},
+              React.createElement('option', {value:''}, '📚 Materia (opcional)'),
+              materias.map(m => React.createElement('option', {key:m.id, value:m.id}, m.nombre))
+            ),
+            React.createElement('button', {type:'button', onClick:()=>setShowMateriasManager(!showMateriasManager), style:{whiteSpace:'nowrap'}}, showMateriasManager?'Ocultar':'⚙️ Gestionar')
+          ),
+          showMateriasManager && React.createElement('div', {className:'card', style:{marginTop:8, background:'var(--stat-bg)'}},
+            React.createElement('div', {style:{fontWeight:'bold', marginBottom:6}}, '📚 Materias'),
+            materias.length === 0 && React.createElement('div', {style:{fontSize:12, color:'var(--muted)'}}, 'Aún no hay materias. Agrega la primera:'),
+            materias.map(m => React.createElement('div', {key:m.id, style:{display:'flex', alignItems:'center', gap:8, padding:'4px 0'}},
+              React.createElement('span', {style:{width:12, height:12, borderRadius:3, background:m.color, display:'inline-block'}}),
+              React.createElement('span', {style:{flex:1}}, m.nombre),
+              React.createElement('button', {onClick:()=>deleteMateria(m.id), className:'danger', style:{padding:'2px 8px'}}, '🗑️')
+            )),
+            React.createElement('div', {style:{display:'flex', gap:6, marginTop:6}},
+              React.createElement('input', {placeholder:'Nueva materia', value:newMateria.nombre, onChange:e=>setNewMateria({...newMateria, nombre:e.target.value}), style:{flex:1}}),
+              React.createElement('input', {type:'color', value:newMateria.color, onChange:e=>setNewMateria({...newMateria, color:e.target.value}), style:{width:44, padding:2, height:38}}),
+              React.createElement('button', {onClick:addMateria, className:'primary', style:{padding:'0 14px'}}, '+')
+            )
+          ),
           React.createElement('label', {style:{display:'flex', alignItems:'center', gap:8, marginTop:10, cursor:'pointer'}},
             React.createElement('input', {type:'checkbox', checked:newCls.repeat, onChange:e=>setNewCls({...newCls, repeat:e.target.checked})}),
             React.createElement('span', null, '🔁 Repetir cada semana')
@@ -1811,10 +1903,10 @@ function App() {
         })()
         )),
       tab === 'cobros' && React.createElement('div', null,
-        React.createElement('div', {style:{display:'flex', gap:8, marginBottom:16}},
-          ['ninos','totales'].map(st =>
+        React.createElement('div', {style:{display:'flex', gap:8, marginBottom:16, flexWrap:'wrap'}},
+          ['ninos','totales','reporte'].map(st =>
             React.createElement('button', {key:st, onClick:()=>setBillingSubTab(st), className: billingSubTab===st?'primary':''},
-              st==='ninos'?'👶 Niños y precios':'💵 Total a cobrar')
+              st==='ninos'?'👶 Niños y precios':st==='totales'?'💵 Total a cobrar':'📄 Reporte del mes')
           )
         ),
         billingSubTab === 'ninos' && React.createElement('div', null,
@@ -1852,29 +1944,105 @@ function App() {
         billingSubTab === 'totales' && React.createElement('div', null,
           students.length === 0 && React.createElement('div', {className:'card'}, 'Agrega estudiantes en "Niños y precios" para ver los totales.'),
           (() => {
+            const yyyymm = new Date().toISOString().slice(0, 7);
+            const yyyymmNom = new Date().toLocaleDateString('es', {month:'long', year:'numeric'});
             let granTotal = 0;
+            let granDeuda = 0;
             const filas = students.map(s => {
               const clasesDictadas = classes.filter(c => c.status === 'done' && c.student.trim().toLowerCase() === s.name.trim().toLowerCase());
               const horasTotales = clasesDictadas.reduce((sum, c) => sum + parseDurationToHours(c.duration), 0);
               const total = horasTotales * s.price;
               granTotal += total;
-              return React.createElement('div', {key:s.id, className:'card', style:{display:'flex', justifyContent:'space-between'}},
-                React.createElement('div', null,
-                  React.createElement('strong', null, s.name),
-                  React.createElement('div', {style:{fontSize:12, color:'var(--muted)'}}, `${clasesDictadas.length} clase(s) · ${formatHours(horasTotales)} en total · $${s.price.toLocaleString()}/h`)
+              // Mes actual: costo + estado de pago
+              const costoMes = costoEstudianteMes(s, yyyymm);
+              const pagoMes = esMesPagado(s, yyyymm);
+              // Deuda acumulada: todos los meses con clases dictadas sin pagar
+              const mesesConClases = [...new Set(clasesDictadas.map(c => (c.date||'').slice(0,7)))].
+                filter(m => m && /^\d{4}-\d{2}$/.test(m) && !esMesPagado(s, m));
+              let deuda=0;
+              if (pagoMes) {
+                mesesConClases.forEach(m => { if (m !== yyyymm) deuda += costoEstudianteMes(s, m); });
+              } else {
+                mesesConClases.forEach(m => deuda += costoEstudianteMes(s, m));
+              }
+              granDeuda += deuda;
+              return React.createElement('div', {key:s.id, className:'card', style:{marginBottom:10}},
+                React.createElement('div', {style:{display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:8}},
+                  React.createElement('div', null,
+                    React.createElement('strong', null, s.name),
+                    React.createElement('div', {style:{fontSize:12, color:'var(--muted)'}}, `${clasesDictadas.length} clase(s) · ${formatHours(horasTotales)} · $${s.price.toLocaleString()}/h`)
+                  ),
+                  React.createElement('div', {style:{fontWeight:'bold', fontSize:16}}, `$${total.toLocaleString(undefined, {maximumFractionDigits:0})}`)
                 ),
-                React.createElement('div', {style:{fontWeight:'bold', fontSize:16}}, `$${total.toLocaleString(undefined, {maximumFractionDigits:0})}`)
+                React.createElement('div', {style:{marginTop:8, borderTop:'1px solid var(--card-border)', paddingTop:8, display:'flex', alignItems:'center', gap:10, flexWrap:'wrap'}},
+                  React.createElement('div', {style:{fontSize:13}}, `${(yyyymmNom.charAt(0).toUpperCase()+yyyymmNom.slice(1))}: `,
+                    React.createElement('strong', {style:{color:'#1D9E75'}}, `$${costoMes.toLocaleString(undefined,{maximumFractionDigits:0})}`)
+                  ),
+                  React.createElement('button', {onClick:()=>toggleMesPagado(s, yyyymm), style:{padding:'6px 12px', background: pagoMes ? '#e5e7eb' : '#1D9E75', color: pagoMes ? '#374151' : '#fff', border:'none', borderRadius:8}},
+                    pagoMes ? '✅ Mes pagado (tocar para pendiente)' : '💰 Marcar mes como pagado'
+                  ),
+                  deuda > 0 && React.createElement('span', {style:{fontSize:13, color:'#b91c1c', fontWeight:600}}, `Adeuda: $${deuda.toLocaleString(undefined, {maximumFractionDigits:0})}`),
+                  deuda === 0 && React.createElement('span', {style:{fontSize:13, color:'#1D9E75', fontWeight:600}}, '✓ Al día')
+                )
               );
             });
             return React.createElement('div', null,
               filas,
               React.createElement('div', {className:'card', style:{background:'var(--success-bg)', display:'flex', justifyContent:'space-between'}},
-                React.createElement('strong', null, 'Total general'),
+                React.createElement('strong', null, 'Total general (todo el tiempo)'),
                 React.createElement('strong', {style:{fontSize:18, color:'#1D9E75'}}, `$${granTotal.toLocaleString(undefined, {maximumFractionDigits:0})}`)
+              ),
+              granDeuda > 0 && React.createElement('div', {className:'card', style:{background:'#fde8e8', display:'flex', justifyContent:'space-between'}},
+                React.createElement('strong', null, 'Total adeudado'),
+                React.createElement('strong', {style:{fontSize:18, color:'#b91c1c'}}, `$${granDeuda.toLocaleString(undefined, {maximumFractionDigits:0})}`)
               )
             );
           })()
-        )
+        ),
+        billingSubTab === 'reporte' && (() => {
+          const y = reportMonth.getFullYear();
+          const m = reportMonth.getMonth();
+          const yyyymm = `${y}-${String(m+1).padStart(2,'0')}`;
+          const reportMes = reportMonth.toLocaleDateString('es', {month:'long', year:'numeric'});
+          const mesClases = classes.filter(c => (c.date || '').startsWith(yyyymm));
+          const mesDone = mesClases.filter(c => c.status === 'done');
+          let granHoras = 0, granCosto = 0;
+          const dirA = c => c.materia ? ` · ${materiaNameOf(c.materia)}` : '';
+          const porEstudiante = students.map(s => {
+            const mine = mesDone.filter(c => c.student.trim().toLowerCase() === s.name.trim().toLowerCase());
+            const horas = mine.reduce((sum,c) => sum + parseDurationToHours(c.duration), 0);
+            const costo = horas * (s.price || 0);
+            granHoras += horas; granCosto += costo;
+            const pago = esMesPagado(s, yyyymm);
+            return React.createElement('div', {key:s.id, className:'card', style:{marginBottom:10}},
+              React.createElement('div', {style:{display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:8}},
+                React.createElement('div', null,
+                  React.createElement('strong', null, s.name),
+                  React.createElement('div', {style:{fontSize:12, color:'var(--muted)'}}, `${mine.length} clase(s) · ${formatHours(horas)} · $${s.price.toLocaleString()}/h`),
+                  React.createElement('div', {style:{fontSize:12, color:'var(--muted)', marginTop:2}},
+                    mine.length === 0 ? 'Sin clases dictadas este mes' :
+                    mine.slice(0,8).map(c => `${c.date.slice(8,10)} ${c.hour}${dirA(c)}`).join(' · '))
+                ),
+                React.createElement('div', {style:{textAlign:'right'}},
+                  React.createElement('div', {style:{fontWeight:'bold', fontSize:16}}, `$${costo.toLocaleString(undefined, {maximumFractionDigits:0})}`),
+                  React.createElement('div', {style:{fontSize:12, color: pago ? '#1D9E75' : '#b91c1c', fontWeight:600}}, pago ? '✓ Pagado' : 'Pendiente')
+                )
+              )
+            );
+          });
+          return React.createElement('div', null,
+            React.createElement('div', {className:'row', style:{justifyContent:'space-between', marginBottom:10, flexWrap:'wrap'}},
+              React.createElement('button', {onClick:()=>{const d=new Date(reportMonth); d.setMonth(d.getMonth()-1); setReportMonth(d);}}, '← Anterior'),
+              React.createElement('strong', {style:{textTransform:'capitalize'}}, reportMes),
+              React.createElement('button', {onClick:()=>{const d=new Date(reportMonth); d.setMonth(d.getMonth()+1); setReportMonth(d);}}, 'Siguiente →')
+            ),
+            React.createElement('div', {className:'card', style:{background:'var(--success-bg)', display:'flex', justifyContent:'space-between', marginBottom:10}},
+              React.createElement('strong', null, `Clases dictadas: ${mesDone.length} · Horas: ${formatHours(granHoras)}`),
+              React.createElement('strong', {style:{fontSize:18, color:'#1D9E75'}}, `$${granCosto.toLocaleString(undefined, {maximumFractionDigits:0})}`)
+            ),
+            porEstudiante
+          );
+        })()
       ),
       tab === 'calendario' && (() => {
         const year = calMonth.getFullYear();
