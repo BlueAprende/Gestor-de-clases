@@ -436,9 +436,6 @@ function App() {
   const [profTab, setProfTab] = useState('resumen');
   const [tCalMonth, setTCalMonth] = useState(()=>{const d=new Date(); d.setDate(1); return d;});
   const [tCalDay, setTCalDay] = useState(null);
-  const [tExtraOpen, setTExtraOpen] = useState(false);
-  const [tExtraStudent, setTExtraStudent] = useState('');
-  const [tExtraHour, setTExtraHour] = useState('7:00');
   const [newCls, setNewCls] = useState({student:'', date: getTodayDate(), hour:'7:00', teacherId: null, status:'pending', doneDate:null, duration:null, repeat:false, repeatWeeks:4, direccion:'', notas:''});
   const [assigningId, setAssigningId] = useState(null);
   const [editingTeacher, setEditingTeacher] = useState(null);
@@ -835,43 +832,6 @@ function App() {
       setClasses(prevClasses);
       await writeData('blue/classes', prevClasses);
     });
-  };
-
-  // Agregar clase extra en un horario no disponible (excepción, ej. hoy para Thomas)
-  const agregarClaseExtra = async () => {
-    const nombre = tExtraStudent.trim();
-    if(!nombre) { notify('Escribe el nombre del estudiante', 'error'); return; }
-    if(!tExtraHour) { notify('Elige la hora', 'error'); return; }
-    if(!tCalDay) { notify('Primero selecciona un día en el calendario', 'error'); return; }
-    const dateStr = `${tCalMonth.getFullYear()}-${String(tCalMonth.getMonth()+1).padStart(2,'0')}-${String(tCalDay).padStart(2,'0')}`;
-    const dayFromDate = getDayNameFromDate(dateStr);
-    if(curTeacher && hasConflict(curTeacher.id, dayFromDate, tExtraHour, dateStr)) {
-      notify(`${curTeacher.name} ya tiene otra clase ese día a las ${tExtraHour}`, 'error');
-      return;
-    }
-    const nueva = {
-      id: Date.now(),
-      student: nombre,
-      day: dayFromDate,
-      hour: tExtraHour,
-      date: dateStr,
-      teacherId: curTeacher.id,
-      status: 'pending',
-      doneDate: null,
-      duration: null,
-      transporte: false,
-      recurringId: null,
-      direccion: '',
-      notas: ''
-    };
-    const updated = [...classes, nueva];
-    setClasses(updated);
-    await writeData('blue/classes', updated);
-    logAction('Agregó clase extra', `${nueva.student} · ${nueva.date} ${nueva.hour}`);
-    notify('Clase extra agregada ✅');
-    setTExtraOpen(false);
-    setTExtraStudent('');
-    setTExtraHour('7:00');
   };
 
   const saveReschedule = async () => {
@@ -1614,24 +1574,6 @@ function App() {
             )
           );
         })(),
-        tCalDay && React.createElement('div', {className:'card', style:{background:'#f0f7ff'}},
-          React.createElement('div', {style:{display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, flexWrap:'wrap'}},
-            React.createElement('h4', {style:{margin:0}}, '➕ Clase extra'),
-            React.createElement('button', {onClick:()=>setTExtraOpen(!tExtraOpen), style:{fontSize:12}}, tExtraOpen ? 'Cerrar' : 'Agregar clase extra')
-          ),
-          React.createElement('p', {style:{fontSize:12, color:'var(--muted)', marginTop:4}}, 'Para un caso especial (p. ej. hoy, en un horario que normalmente no tienes disponible). Se agregará como clase pendiente.'),
-          tExtraOpen && React.createElement('div', {style:{marginTop:10}},
-            React.createElement('input', {placeholder:'Nombre del estudiante', value:tExtraStudent, onChange:e=>setTExtraStudent(e.target.value), list:'nombres-registrados-clases', style:{width:'100%', fontFamily:'inherit', fontSize:14, padding:8, borderRadius:8, border:'1px solid #ccc', marginBottom:8}}),
-            React.createElement('datalist', {id:'nombres-registrados-clases'},
-              [...new Set([...classes.map(c => c.student.trim()), ...students.map(s => s.name.trim())])].filter(n=>n).map(n => React.createElement('option', {key:n, value:n}))
-            ),
-            React.createElement('input', {type:'time', value:tExtraHour, onChange:e=>setTExtraHour(e.target.value), step:300, style:{width:'100%', fontFamily:'inherit', fontSize:14, padding:8, borderRadius:8, border:'1px solid #ccc'}}),
-            React.createElement('div', {className:'row', style:{marginTop:10}},
-              React.createElement('button', {className:'primary', onClick:agregarClaseExtra, style:{flex:1}}, '➕ Agregar clase'),
-              React.createElement('button', {onClick:()=>{setTExtraOpen(false); setTExtraStudent('');}, style:{flex:1}}, 'Cancelar')
-            )
-          )
-        ),
         pendingClasses.length > 0 && React.createElement('div', {className:'card', style:{background:'#fff7e6'}},
           React.createElement('h4', null, '⏳ Tienes clases pendientes de semanas anteriores'),
           pendingClasses.filter(c => c.date < getTodayDate()).map(c => React.createElement('div', {key:c.id, style:{padding:'4px 0', fontSize:13}},
@@ -1860,12 +1802,12 @@ function App() {
               const dayFromDate = getDayNameFromDate(newCls.date);
               const disponible = avail[t.id] && avail[t.id][sk(dayFromDate, hourBlock(newCls.hour))];
               const conflict = hasConflict(t.id, dayFromDate, newCls.hour, newCls.date);
-              const disabled = !disponible || conflict;
+              const disabled = conflict;
               return React.createElement('div', {key:t.id, onClick:()=>{ if(!disabled) { setSelectedTeacherId(t.id); setNewCls({...newCls, teacherId: t.id}); } }, style:{padding:6, margin:4, background: selectedTeacherId===t.id?'var(--tselect-selected)':'var(--tselect-bg)', border:'1px solid var(--card-border)', borderRadius:6, opacity: disabled?0.4:1, cursor: disabled?'not-allowed':'pointer'}},
                 React.createElement(Avatar, {name:t.name, color:COLORS[t.colorIdx], size:30, photo:t.foto}),
                 React.createElement('span', {style:{marginLeft:8}}, t.name),
-                !disponible && React.createElement('span', {style:{fontSize:10, color:'#e64545', marginLeft:8}}, ' (no disponible)'),
-                conflict && !disabled && React.createElement('span', {style:{fontSize:10, color:'#d97706', marginLeft:8}}, ' (conflicto)')
+                !disponible && React.createElement('span', {style:{fontSize:10, color:'#d97706', marginLeft:8}}, ' (fuera de su horario · excepción)'),
+                conflict && React.createElement('span', {style:{fontSize:10, color:'#e64545', marginLeft:8}}, ' (conflicto de horario)')
               );
             })
           ),
