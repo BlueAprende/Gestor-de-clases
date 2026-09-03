@@ -429,6 +429,7 @@ function App() {
   const [teachers, setTeachers] = useState([]);
   const [classes, setClasses] = useState([]);
   const [avail, setAvail] = useState({});
+  const [pagos, setPagos] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [tab, setTab] = useState('clases');
@@ -568,6 +569,7 @@ function App() {
         let a = await readData('blue/avail') || {};
         let s = await readData('blue/students') || [];
         let lg = await readData('blue/log') || [];
+        let pag = await readData('blue/pagos') || {};
         t = Array.isArray(t) ? t : Object.values(t);
         c = Array.isArray(c) ? c : Object.values(c);
         s = Array.isArray(s) ? s : Object.values(s);
@@ -581,7 +583,7 @@ function App() {
           return updated;
         });
         if (changed) { await writeData('blue/classes', migrated); c = migrated; }
-        if (mounted) { setTeachers(t); setClasses(c); setAvail(a); setStudents(s); setLogs(lg); setError(null); }
+        if (mounted) { setTeachers(t); setClasses(c); setAvail(a); setStudents(s); setLogs(lg); setPagos(pag); setError(null); }
       } catch(err) { if(mounted) setError(err.message); }
       finally { if(mounted) setLoading(false); }
     }
@@ -599,7 +601,8 @@ function App() {
       const u3 = listenData('blue/avail', v => { if(v) setAvail(v); });
       const u4 = listenData('blue/students', v => { setStudents(v ? (Array.isArray(v)?v:Object.values(v)) : []); });
       const u5 = listenData('blue/log', v => { setLogs(v ? (Array.isArray(v)?v:Object.values(v)) : []); });
-      unsubs = [u1, u2, u3, u4, u5];
+      const u6 = listenData('blue/pagos', v => { if(v) setPagos(v); else setPagos({}); });
+      unsubs = [u1, u2, u3, u4, u5, u6];
     });
     return () => { unsubs.forEach(fn => fn && fn()); };
   }, []);
@@ -1092,6 +1095,24 @@ function App() {
     const done = classes.filter(c => c.status === 'done' && String(c.teacherId) === String(profe.id));
     return done.reduce((s, c) => s + parseDurationToHours(c.duration) * pagoProfePorHora(profe, c), 0);
   };
+  // Total ya registrado como pagado al profe (suma de blue/pagos[teacherId])
+  const totalPagadoRegistrado = (profe) => {
+    const arr = (profe && pagos && pagos[profe.id]) ? (Array.isArray(pagos[profe.id]) ? pagos[profe.id] : Object.values(pagos[profe.id])) : [];
+    return arr.reduce((s, p) => s + (Number(p.monto) || 0), 0);
+  };
+  // Marca como pagado todo el pendiente acumulado del profe y reinicia la cuenta
+  const pagarProfesor = (profe) => {
+    const ganado = totalPagadoProfe(profe) * 1000;
+    const yaPagado = totalPagadoRegistrado(profe) * 1000;
+    const pendiente = Math.max(0, ganado - yaPagado);
+    if (pendiente <= 0) { notify('No hay monto pendiente por pagar'); return; }
+    const lista = (pagos && pagos[profe.id] && Array.isArray(pagos[profe.id])) ? [...pagos[profe.id]] : [];
+    lista.push({ fecha: getTodayDate(), monto: pendiente / 1000 });
+    writeData(`blue/pagos/${profe.id}`, lista);
+    setPagos({ ...(pagos || {}), [profe.id]: lista });
+    notify(`Pago registrado a ${profe.name}: ${fmtCol(pendiente)} 💵`);
+    logAction(`Pagó a ${profe.name}`, fmtCol(pendiente));
+  };
   // ¿El profe tiene alguna clase cobrada al papá en $92? (para saber si aplica tarifa de $80)
   const tieneClases92 = (profe) => classes.some(c => String(c.teacherId) === String(profe.id) && precioPapáDeClase(c) >= 92000);
   // Formatea un valor EN MILES a pesos colombianos (ej. 70 -> "$70 mil", 1200 -> "$1,2 M")
@@ -1100,6 +1121,8 @@ function App() {
     if (n >= 1000) return `$${(n / 1000).toLocaleString('es-CO', { maximumFractionDigits: 1 })} M`;
     return `$${Math.round(n)} mil`;
   };
+  // Formatea un valor EN PESOS a pesos colombianos (ej. 70000 -> "$70.000")
+  const fmtCol = (pesos) => `$${(Number(pesos) || 0).toLocaleString('es-CO')}`;
 
   // ===== Respaldo de datos (exportar / importar JSON) =====
   const exportBackup = () => {
@@ -1847,10 +1870,28 @@ function App() {
                         React.createElement('span', {style:{color:'#1D9E75'}}, fmtMiles(totalPagadoProfe(t)))
                       )
                     );
-                  })()
-            ),
-            React.createElement('div', {className:'card'},
-              React.createElement('h3', null, '🗓️ Calendario de clases'),
+                  })(),
+            React.createElement('div', {style:{marginTop:6, paddingTop:6, borderTop:'1px dashed var(--card-border)'}},
+              (() => {
+                const ganado = totalPagadoProfe(t);
+                const yaPago = totalPagadoRegistrado(t);
+                const pend = Math.max(0, ganado - yaPago);
+                return React.createElement('div', null,
+                  React.createElement('div', {style:{display:'flex', justifyContent:'space-between', fontSize:13, padding:'2px 0'}},
+                    React.createElement('span', null, 'Total ya pagado'),
+                    React.createElement('strong', null, fmtCol(yaPago * 1000))
+                  ),
+                  React.createElement('div', {style:{display:'flex', justifyContent:'space-between', fontSize:13, padding:'2px 0'}},
+                    React.createElement('span', null, 'Pendiente por pagar'),
+                    React.createElement('strong', {style:{color: pend > 0 ? '#b91c1c' : '#1D9E75'}}, pend > 0 ? fmtCol(pend * 1000) : 'Al día ✅')
+                  ),
+                  pend > 0 && React.createElement('button', {onClick:()=>pagarProfesor(t), style:{marginTop:8, width:'100%'}}, '💵 Marcar como pagado')
+                );
+              })()
+            )
+          ),
+          React.createElement('div', {className:'card'},
+            React.createElement('h3', null, '🗓️ Calendario de clases'),
               React.createElement(TeacherCalendar, {teacher:t, classes, month:tProfileMonth, setMonth:setTProfileMonth, selectedDay:tProfileDay, setSelectedDay:setTProfileDay})
             ),
             React.createElement('div', {className:'card'},
