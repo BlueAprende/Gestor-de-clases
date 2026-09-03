@@ -1433,7 +1433,16 @@ function App() {
           React.createElement('h3', null, '📅 Hoy'),
           React.createElement('div', {style:{fontSize:15, lineHeight:1.9}},
             React.createElement('div', null, `📚 ${classesToday.length} clase${classesToday.length===1?'':'s'} hoy`),
-            atrasadas.length > 0 && React.createElement('div', {style:{color:'#e64545', fontWeight:600}}, `⚠ ${atrasadas.length} clase${atrasadas.length===1?'':'s'} atrasada${atrasadas.length===1?'':'s'} sin registrar`),
+            atrasadas.length > 0 && React.createElement('div', null,
+              React.createElement('div', {style:{color:'#e64545', fontWeight:600, marginBottom:6}}, `⚠ ${atrasadas.length} clase${atrasadas.length===1?'':'s'} atrasada${atrasadas.length===1?'':'s'} sin registrar`),
+              atrasadas.map(c => React.createElement('div', {key:c.id, style:{display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, padding:'6px 0', borderBottom:'1px solid var(--card-border)', flexWrap:'wrap'}},
+                React.createElement('div', null,
+                  React.createElement('strong', null, c.student),
+                  React.createElement('div', {style:{fontSize:12, color:'var(--muted)'}}, `${c.date} · ${c.hour}`)
+                ),
+                React.createElement('button', {onClick:()=>{ const d = new Date(c.date); setTCalMonth(new Date(d.getFullYear(), d.getMonth(), 1)); setTCalDay(d.getDate()); setProfTab('registrar'); }, style:{background:'#1d4ed8', color:'#fff', border:'none', borderRadius:6, padding:'5px 10px', fontSize:12, fontWeight:600, cursor:'pointer'}}, '↩️ Registrar')
+              ))
+            ),
             React.createElement('div', null, proximaHoy ? `⏰ Próxima clase: ${proximaHoy.student} a las ${proximaHoy.hour} — ` : '✅ No tienes más clases pendientes hoy'),
             proximaHoy && React.createElement(Countdown, {targetHour:proximaHoy.hour})
           )
