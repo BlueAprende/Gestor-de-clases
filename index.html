@@ -1500,7 +1500,7 @@ function App() {
   // VISTA COORDINADORA
   if(screen === 'coord') {
     const filteredClasses = classes.filter(c => {
-      if(filterTeacher !== 'all' && c.teacherId !== filterTeacher) return false;
+      if(filterTeacher !== 'all' && String(c.teacherId) !== String(filterTeacher)) return false;
       if(filterStatus !== 'todos' && c.status !== filterStatus) return false;
       if(searchText.trim()) {
         const q = searchText.trim().toLowerCase();
