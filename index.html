@@ -1742,7 +1742,7 @@ function App() {
         )
       ),
       tab === 'clases' && React.createElement('div', null,
-        filterStatus === 'todos' && React.createElement('div', {className:'card'},
+        React.createElement('div', {className:'card'},
           React.createElement('h3', null, '+ Agregar clase'),
           React.createElement('input', {placeholder:'Estudiante', value:newCls.student, onChange:e=>setNewCls({...newCls, student:e.target.value}), list:'nombres-registrados-clases', style:classErrors.student?{borderColor:'#dc2626'}:{}}),
           classErrors.student && React.createElement('div', {style:{color:'#dc2626', fontSize:12, marginTop:-4, marginBottom:8}}, classErrors.student),
@@ -1782,27 +1782,7 @@ function App() {
             )
           ),
           React.createElement('button', {className:'primary', onClick:addClass, style:{marginTop:10}}, newCls.repeat ? '+ Agregar clases recurrentes' : '+ Agregar clase')
-        ),
-        React.createElement('div', {className:'row', style:{marginBottom:12, flexWrap:'wrap'}},
-          React.createElement('div', {className:'search-bar', style:{flex:1, marginBottom:0}},
-            React.createElement('span', null, '🔍'),
-            React.createElement('input', {placeholder:'Buscar por estudiante o profesor...', value:searchText, onChange:e=>setSearchText(e.target.value)})
-          ),
-          React.createElement('select', {value:filterTeacher, onChange:e=>setFilterTeacher(e.target.value), style:{width:'auto', marginBottom:0}},
-            React.createElement('option', {value:'all'}, '👥 Todos los profes'),
-            teachers.map(t => React.createElement('option', {key:t.id, value:t.id}, t.name))
-          ),
-          React.createElement('select', {value:filterStatus, onChange:e=>setFilterStatus(e.target.value), style:{width:'auto', marginBottom:0}},
-            React.createElement('option', {value:'todos'}, '📋 Todos los estados'),
-            React.createElement('option', {value:'pending'}, '⏳ Pendientes'),
-            React.createElement('option', {value:'done'}, '✅ Dictadas'),
-            React.createElement('option', {value:'cancelada'}, '❌ Canceladas'),
-            React.createElement('option', {value:'aplazada'}, '🎗 Aplazadas')
-          ),
-          React.createElement('button', {onClick:sendTomorrowReminders, title:'Abre WhatsApp con las clases pendientes de mañana de cada profe'}, '🔔 Recordar mañana')
-        ),
-        filteredClasses.length === 0 && React.createElement('div', {className:'card'}, 'No se encontraron clases.'),
-        filteredClasses.map(renderClassItem)
+        )
       ),
       tab === 'profes' && React.createElement('div', null,
         viewTeacherProfile ? (() => {
@@ -2149,10 +2129,21 @@ function App() {
         for (let d=1; d<=daysInMonth; d++) cells.push(d);
         const classesForDay = (d) => {
           const dateStr = `${year}-${pad(month+1)}-${pad(d)}`;
-          return classes.filter(c => c.date === dateStr);
+          let lista = classes.filter(c => c.date === dateStr);
+          if (filterTeacher !== 'all') lista = lista.filter(c => String(c.teacherId) === String(filterTeacher));
+          return lista;
         };
         const selectedClasses = calSelectedDay ? classesForDay(calSelectedDay) : [];
         return React.createElement('div', null,
+          React.createElement('div', {className:'card', style:{marginBottom:12}},
+            React.createElement('div', {style:{display:'flex', alignItems:'center', gap:8, flexWrap:'wrap'}},
+              React.createElement('label', {style:{fontSize:13, color:'var(--muted)'}}, '👥 Ver clases de:'),
+              React.createElement('select', {value:filterTeacher, onChange:e=>{setFilterTeacher(e.target.value); setCalSelectedDay(null);}, style:{flex:1, minWidth:150}},
+                React.createElement('option', {value:'all'}, 'Todos los profesores'),
+                teachers.map(t => React.createElement('option', {key:t.id, value:t.id}, t.name))
+              )
+            )
+          ),
           React.createElement('div', {className:'row', style:{justifyContent:'space-between', marginBottom:10}},
             React.createElement('button', {onClick:()=>{const d=new Date(calMonth); d.setMonth(d.getMonth()-1); setCalMonth(d); setCalSelectedDay(null);}}, '← Anterior'),
             React.createElement('strong', {style:{textTransform:'capitalize'}}, calMonth.toLocaleDateString('es-ES', {month:'long', year:'numeric'})),
