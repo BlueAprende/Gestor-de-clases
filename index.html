@@ -103,6 +103,9 @@
   .cal-cell{min-height:52px;border:1px solid var(--card-border);border-radius:6px;padding:4px;font-size:11px;cursor:pointer;background:var(--card-bg)}
   .cal-cell.has-classes{background:#e8f5f0}
   body.dark .cal-cell.has-classes{background:#1c3830}
+  .cal-cell.has-pending{background:#fff3cd;outline:2px solid #f0ad4e}
+  body.dark .cal-cell.has-pending{background:#4a3b16}
+  .cal-cell.has-pending .cal-daynum{color:#b06a00}
   .cal-cell.selected{outline:2px solid #1D9E75}
   .cal-daynum{font-weight:600}
   .pagination{display:flex;justify-content:center;gap:8px;margin-top:10px}
@@ -364,10 +367,11 @@ function TeacherCalendar({ teacher, classes, month, setMonth, selectedDay, setSe
         if (d === null) return React.createElement('div', { key: 'b' + i });
         const dc = classesForDay(d);
         const isSel = selectedDay === d;
+        const hasPending = dc.some(c => c.status === 'pending');
         return React.createElement('div', {
           key: d,
           onClick: () => setSelectedDay(isSel ? null : d),
-          className: `cal-cell ${dc.length > 0 ? 'has-classes' : ''} ${isSel ? 'selected' : ''}`
+          className: `cal-cell ${dc.length > 0 ? 'has-classes' : ''} ${hasPending ? 'has-pending' : ''} ${isSel ? 'selected' : ''}`
         },
           React.createElement('div', { className: 'cal-daynum' }, d),
           dc.length > 0 && React.createElement('div', null, `${dc.length} clase${dc.length > 1 ? 's' : ''}`)
@@ -1459,51 +1463,80 @@ function App() {
         ))
       ),
       profTab === 'registrar' && React.createElement('div', null,
-        pendingClasses.length === 0 && React.createElement('div', {className:'card'}, '🎉 No tienes clases pendientes por registrar.'),
-        pendingClasses.map(c => React.createElement('div', {key:c.id, className:'card', style:{marginBottom:8}},
-          React.createElement('div', null, React.createElement('strong', null, c.student), ` · ${c.date} ${c.hour}`),
-          c.direccion && React.createElement('div', {style:{fontSize:12, color:'var(--muted)', marginTop:2}}, `📍 ${c.direccion}`),
-          durationModal === c.id ? React.createElement('div', {style:{marginTop:8}},
-            React.createElement('div', {style:{fontSize:12, marginBottom:6}}, '🕐 ¿A qué hora empezó y terminó la clase? (opcional)'),
-            React.createElement('div', {className:'grid2'},
-              React.createElement('div', null,
-                React.createElement('div', {style:{fontSize:12, color:'var(--muted)', marginBottom:2}}, 'Empezó'),
-                React.createElement('input', {type:'time', value:durInicio, onChange:e=>setDurInicio(e.target.value), style:{width:'100%', fontFamily:'inherit', fontSize:14, padding:8, borderRadius:8, border:'1px solid #ccc'}})
-              ),
-              React.createElement('div', null,
-                React.createElement('div', {style:{fontSize:12, color:'var(--muted)', marginBottom:2}}, 'Terminó'),
-                React.createElement('input', {type:'time', value:durFin, onChange:e=>setDurFin(e.target.value), style:{width:'100%', fontFamily:'inherit', fontSize:14, padding:8, borderRadius:8, border:'1px solid #ccc'}})
-              )
-            ),
-            React.createElement('div', {style:{fontSize:12, marginBottom:6, marginTop:10}}, '¿Cuánto duró la clase?'),
-            React.createElement('div', {className:'grid2'},
-              React.createElement('select', {value:durHour, onChange:e=>setDurHour(parseInt(e.target.value))},
-                [0,1,2,3,4].map(h => React.createElement('option', {key:h, value:h}, `${h} h`))
-              ),
-              React.createElement('select', {value:durMin, onChange:e=>setDurMin(parseInt(e.target.value))},
-                [0,30].map(m => React.createElement('option', {key:m, value:m}, `${m} min`))
-              )
-            ),
-            React.createElement('div', {style:{fontSize:12, margin:'10px 0 6px'}}, '¿Qué se vio en la clase?'),
-            React.createElement('textarea', {
-              value:durDescripcion,
-              onChange:e=>setDurDescripcion(e.target.value),
-              placeholder:'Ej: repasamos multiplicación, tarea para el jueves...',
-              rows:3,
-              style:{width:'100%', fontFamily:'inherit', fontSize:14, padding:8, borderRadius:8, border:'1px solid #ccc', resize:'vertical'}
-            }),
-            React.createElement('div', {className:'row', style:{marginTop:8}},
-              React.createElement('button', {className:'primary', onClick:confirmDuration, style:{flex:1}}, `Confirmar ${durHour}:${String(durMin).padStart(2,'0')}`),
-              React.createElement('button', {onClick:()=>{setDurationModal(null); setDurDescripcion(''); setDurInicio(''); setDurFin('');}, style:{flex:1}}, 'Cancelar')
+        React.createElement('div', {className:'card'},
+          React.createElement('div', {className:'row', style:{justifyContent:'space-between', marginBottom:4, flexWrap:'wrap'}},
+            React.createElement('h3', {style:{margin:0}}, '🗓️ Registrar clase dictada'),
+            pendingClasses.length > 0 && React.createElement('span', {style:{fontSize:13, color:'#b91c1c', fontWeight:600}}, `⚠ ${pendingClasses.length} pendiente${pendingClasses.length===1?'':'s'} sin registrar`)
+          ),
+          React.createElement('p', {style:{fontSize:12, color:'var(--muted)', marginTop:4}}, 'Toca el día de la clase y confirma que la dictaste.')
+        ),
+        React.createElement('div', {className:'card'},
+          React.createElement(TeacherCalendar, {teacher:curTeacher, classes, month:tCalMonth, setMonth:setTCalMonth, selectedDay:tCalDay, setSelectedDay:setTCalDay})
+        ),
+        tCalDay && (() => {
+          const dateStr = `${tCalMonth.getFullYear()}-${String(tCalMonth.getMonth()+1).padStart(2,'0')}-${String(tCalDay).padStart(2,'0')}`;
+          const delDia = myClasses.filter(c => c.date === dateStr).sort((a,b)=>a.hour.localeCompare(b.hour, undefined, {numeric:true}));
+          if (!delDia.length) return React.createElement('div', {className:'card'}, 'No tienes clases este día.');
+          return React.createElement('div', null,
+            React.createElement('div', {className:'card'},
+              React.createElement('h4', null, `Clases del ${tCalDay} de ${tCalMonth.toLocaleDateString('es-ES',{month:'long'})}`),
+              delDia.map(c => React.createElement('div', {key:c.id, style:{padding:'10px 0', borderBottom:'1px solid var(--card-border)'}},
+                React.createElement('div', {style:{display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:8, flexWrap:'wrap'}},
+                  React.createElement('div', null,
+                    React.createElement('div', null, React.createElement('strong', null, c.student),
+                      React.createElement('span', {style:{marginLeft:8, color:'var(--muted)', fontSize:13}}, c.hour)),
+                    c.direccion && React.createElement('div', {style:{fontSize:12, color:'var(--muted)'}}, `📍 ${c.direccion}`),
+                    React.createElement('div', {style:{marginTop:4}}, statusBadge(c))
+                  )
+                ),
+                c.status === 'pending' && React.createElement('div', {className:'row', style:{marginTop:8, flexWrap:'wrap'}, key:'acc-'+c.id},
+                  React.createElement('button', {className:'success', onClick:()=>openDurationModal(c.id), style:{flex:1}}, '✅ Registrar como dictada'),
+                  React.createElement('button', {onClick:()=>aplazarClass(c.id), style:{background:'#dbeafe', color:'#1d4ed8', border:'1px solid #bfdbfe'}}, '🎗 Aplazar'),
+                  React.createElement('button', {onClick:()=>toggleTransporte(c.id), style:{background: c.transporte ? '#ffe4b3' : '#f0f0f0', border:'none', borderRadius:6, padding:'0 12px', cursor:'pointer'}}, c.transporte ? '🚗 ✓' : '🚗 Transporte')
+                ),
+                durationModal === c.id && React.createElement('div', {style:{marginTop:8, borderTop:'1px solid var(--card-border)', paddingTop:8}, key:'dur-'+c.id},
+                  React.createElement('div', {style:{fontSize:12, marginBottom:6}}, '🕐 ¿A qué hora empezó y terminó la clase? (opcional)'),
+                  React.createElement('div', {className:'grid2'},
+                    React.createElement('div', null,
+                      React.createElement('div', {style:{fontSize:12, color:'var(--muted)', marginBottom:2}}, 'Empezó'),
+                      React.createElement('input', {type:'time', value:durInicio, onChange:e=>setDurInicio(e.target.value), style:{width:'100%', fontFamily:'inherit', fontSize:14, padding:8, borderRadius:8, border:'1px solid #ccc'}})
+                    ),
+                    React.createElement('div', null,
+                      React.createElement('div', {style:{fontSize:12, color:'var(--muted)', marginBottom:2}}, 'Terminó'),
+                      React.createElement('input', {type:'time', value:durFin, onChange:e=>setDurFin(e.target.value), style:{width:'100%', fontFamily:'inherit', fontSize:14, padding:8, borderRadius:8, border:'1px solid #ccc'}})
+                    )
+                  ),
+                  React.createElement('div', {style:{fontSize:12, marginBottom:6, marginTop:10}}, '¿Cuánto duró la clase?'),
+                  React.createElement('div', {className:'grid2'},
+                    React.createElement('select', {value:durHour, onChange:e=>setDurHour(parseInt(e.target.value))},
+                      [0,1,2,3,4].map(h => React.createElement('option', {key:h, value:h}, `${h} h`))
+                    ),
+                    React.createElement('select', {value:durMin, onChange:e=>setDurMin(parseInt(e.target.value))},
+                      [0,30].map(m => React.createElement('option', {key:m, value:m}, `${m} min`))
+                    )
+                  ),
+                  React.createElement('div', {style:{fontSize:12, margin:'10px 0 6px'}}, '¿Qué se vio en la clase?'),
+                  React.createElement('textarea', {
+                    value:durDescripcion,
+                    onChange:e=>setDurDescripcion(e.target.value),
+                    placeholder:'Ej: repasamos multiplicación, tarea para el jueves...',
+                    rows:3,
+                    style:{width:'100%', fontFamily:'inherit', fontSize:14, padding:8, borderRadius:8, border:'1px solid #ccc', resize:'vertical'}
+                  }),
+                  React.createElement('div', {className:'row', style:{marginTop:8}},
+                    React.createElement('button', {className:'primary', onClick:confirmDuration, style:{flex:1}}, `Confirmar ${durHour}:${String(durMin).padStart(2,'0')}`),
+                    React.createElement('button', {onClick:()=>{setDurationModal(null); setDurDescripcion(''); setDurInicio(''); setDurFin('');}, style:{flex:1}}, 'Cancelar')
+                  )
+                )
+              ))
             )
-          ) : React.createElement('div', {className:'row', style:{marginTop:8}},
-              React.createElement('button', {className:'success', onClick:()=>openDurationModal(c.id), style:{flex:1}}, '✅ Registrar como dictada'),
-              React.createElement('button', {onClick:()=>toggleTransporte(c.id), style:{background: c.transporte ? '#ffe4b3' : '#f0f0f0', border:'none', borderRadius:6, padding:'0 12px', cursor:'pointer', whiteSpace:'nowrap'}}, c.transporte ? '🚗 ✓' : '🚗 Transporte')
-            )
-        )),
-        doneClasses.length > 0 && React.createElement('div', {className:'card'},
-          React.createElement('h4', null, 'Clases ya dictadas'),
-          doneClasses.map(c => React.createElement('div', {key:c.id, style:{padding:'4px 0'}}, `${c.student} · ${c.date} (${c.doneDate}) · ${c.horaInicio&&c.horaFin ? `${c.horaInicio} - ${c.horaFin} · ` : ''}Duración: ${c.duration || '?'} h`))
+          );
+        })(),
+        pendingClasses.length > 0 && React.createElement('div', {className:'card', style:{background:'#fff7e6'}},
+          React.createElement('h4', null, '⏳ Tienes clases pendientes de semanas anteriores'),
+          pendingClasses.filter(c => c.date < getTodayDate()).map(c => React.createElement('div', {key:c.id, style:{padding:'4px 0', fontSize:13}},
+            React.createElement('button', {onClick:()=>{ const d = new Date(c.date); setTCalMonth(new Date(d.getFullYear(), d.getMonth(), 1)); setTCalDay(d.getDate()); setProfTab('registrar'); }, style:{background:'none', border:'none', color:'#1d4ed8', cursor:'pointer', padding:0, textAlign:'left'}}, `↩️ ${c.student} · ${c.date} ${c.hour}`)
+          ))
         )
       ),
       profTab === 'disponibilidad' && React.createElement('div', {className:'card'},
@@ -1881,6 +1914,15 @@ function App() {
             )
           );
         })() : (
+          React.createElement('div', {className:'card', style:{marginBottom:12, background:'var(--stat-bg)'}},
+            React.createElement('div', {style:{display:'flex', alignItems:'center', gap:10, flexWrap:'wrap'}},
+              React.createElement(Avatar, {name:'P', color:'#7c5cff', size:44}),
+              React.createElement('div', {style:{flex:1, minWidth:160}},
+                React.createElement('div', {style:{fontSize:18, fontWeight:'bold'}}, 'Profesores'),
+                React.createElement('div', {style:{fontSize:12, color:'var(--muted)'}}, `${teachers.length} profesores · ${formatHours(classes.filter(c=>c.status==='done').reduce((s,c)=>s+parseDurationToHours(c.duration),0))} horas dictadas en total`)
+              )
+            )
+          ),
           React.createElement('div', {className:'row', style:{marginBottom:12, flexWrap:'wrap'}},
           React.createElement('div', {className:'search-bar', style:{flex:1, marginBottom:0}},
             React.createElement('span', null, '🔍'),
