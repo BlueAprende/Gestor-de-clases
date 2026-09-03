@@ -459,6 +459,7 @@ function App() {
   const [viewTeacherProfile, setViewTeacherProfile] = useState(null);
   const [tProfileMonth, setTProfileMonth] = useState(()=>{const d=new Date(); d.setDate(1); return d;});
   const [tProfileDay, setTProfileDay] = useState(null);
+  const [profileStudentFilter, setProfileStudentFilter] = useState('all');
   const [undoStash, setUndoStash] = useState(null);
   const undoTimerRef = useRef(null);
   const [toast, setToast] = useState(null);
@@ -1758,6 +1759,42 @@ function App() {
             React.createElement('div', {className:'card'},
               React.createElement('h3', null, '📋 Horario semanal'),
               React.createElement(AvailGrid, {avail:avail[t.id] || {}, color, classSlots:myC.map(c=>sk(c.day,hourBlock(c.hour)))})
+            ),
+            React.createElement('div', {className:'card'},
+              React.createElement('h3', null, '🔎 Clases por estudiante'),
+              React.createElement('select', {value:profileStudentFilter, onChange:e=>setProfileStudentFilter(e.target.value), style:{width:'100%', marginBottom:10}},
+                React.createElement('option', {value:'all'}, 'Todos los estudiantes'),
+                [...new Set(myC.map(c => c.student.trim()).filter(Boolean))].sort().map(n => React.createElement('option', {key:n, value:n}, n))
+              ),
+              profileStudentFilter !== 'all' && (() => {
+                const est = profileStudentFilter;
+                const delEst = myC.filter(c => c.student.trim().toLowerCase() === est.toLowerCase());
+                const estDone = delEst.filter(c => c.status === 'done');
+                const estPend = delEst.filter(c => c.status === 'pending');
+                const estCanc = delEst.filter(c => c.status === 'cancelada');
+                const estHoras = estDone.reduce((s,c)=>s+parseDurationToHours(c.duration),0);
+                const todas = delEst.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||'') || b.hour.localeCompare(a.hour));
+                return React.createElement('div', null,
+                  React.createElement('div', {style:{display:'flex', gap:8, flexWrap:'wrap', marginBottom:10}},
+                    React.createElement('div', {className:'stat-card', style:{flex:1}}, React.createElement('div', {className:'stat-num'}, estDone.length), React.createElement('div', {className:'stat-label'}, 'Dictadas')),
+                    React.createElement('div', {className:'stat-card', style:{flex:1}}, React.createElement('div', {className:'stat-num'}, estPend.length), React.createElement('div', {className:'stat-label'}, 'Pendientes')),
+                    React.createElement('div', {className:'stat-card', style:{flex:1}}, React.createElement('div', {className:'stat-num'}, estCanc.length), React.createElement('div', {className:'stat-label'}, 'Canceladas')),
+                    React.createElement('div', {className:'stat-card', style:{flex:1}}, React.createElement('div', {className:'stat-num'}, formatHours(estHoras)), React.createElement('div', {className:'stat-label'}, 'Horas'))
+                  ),
+                  todas.length === 0 && React.createElement('div', {style:{fontSize:13, color:'var(--muted)'}}, 'No hay clases con este estudiante.'),
+                  todas.map(c => React.createElement('div', {key:c.id, style:{display:'flex', justifyContent:'space-between', gap:8, padding:'6px 0', borderBottom:'1px solid var(--card-border)', flexWrap:'wrap'}},
+                    React.createElement('div', null,
+                      React.createElement('strong', null, c.date, ' ', c.hour),
+                      React.createElement('div', {style:{fontSize:12, color:'var(--muted)'}},
+                        c.status === 'done'
+                          ? `✅ Dictada · ${c.duration||'?'} h${c.horaInicio&&c.horaFin ? ` (${c.horaInicio} - ${c.horaFin})` : ''}${c.descripcion ? ' · 📝 '+c.descripcion : ''}`
+                          : (c.status === 'cancelada' ? '❌ Cancelada' : (c.notas ? '⏳ '+c.notas : '⏳ Pendiente'))
+                      )
+                    ),
+                    statusBadge(c)
+                  ))
+                );
+              })()
             ),
             dictadas.length > 0 && React.createElement('div', {className:'card'},
               React.createElement('h3', null, '✅ Últimas dictadas'),
