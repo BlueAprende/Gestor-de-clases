@@ -1131,6 +1131,28 @@ function App() {
     notify(`Pago registrado a ${profe.name}: ${fmtCol(pendiente)} 💵`);
     logAction(`Pagó a ${profe.name}`, fmtCol(pendiente));
   };
+  // Registra un abono (pago parcial) al profe: se descuenta del pendiente
+  const abonoProfesor = (profe) => {
+    const ganado = totalPagadoProfe(profe) * 1000;
+    const yaPagado = totalPagadoRegistrado(profe) * 1000;
+    const pendiente = Math.max(0, ganado - yaPagado);
+    if (pendiente <= 0) { notify('No hay monto pendiente por pagar'); return; }
+    const entrada = prompt(`¿Cuánto le entregaste a ${profe.name}?\n\nPendiente actual: ${fmtCol(pendiente)}\n\nEscribe el monto en pesos (ej: 50000 o 50.000)`,
+      String(Math.round(pendiente)));
+    if (entrada === null) return;
+    const limpio = entrada.replace(/[^\d]/g, '');
+    if(!limpio) { notify('Monto inválido', 'error'); return; }
+    const monto = parseInt(limpio, 10);
+    if(isNaN(monto) || monto <= 0) { notify('Monto inválido', 'error'); return; }
+    if(monto > pendiente) { notify(`No puede ser mayor al pendiente (${fmtCol(pendiente)})`, 'error'); return; }
+    const lista = (pagos && pagos[profe.id] && Array.isArray(pagos[profe.id])) ? [...pagos[profe.id]] : [];
+    lista.push({ fecha: getTodayDate(), monto: monto / 1000 });
+    writeData(`blue/pagos/${profe.id}`, lista);
+    setPagos({ ...(pagos || {}), [profe.id]: lista });
+    const resta = pendiente - monto;
+    notify(`Abono de ${fmtCol(monto)} a ${profe.name} · quedan ${fmtCol(resta)}`);
+    logAction(`Abono a ${profe.name}`, fmtCol(monto));
+  };
   // ¿El profe tiene alguna clase cobrada al papá en $92? (para saber si aplica tarifa de $80)
   const tieneClases92 = (profe) => classes.some(c => String(c.teacherId) === String(profe.id) && precioPapáDeClase(c) >= 92000);
   // Formatea un valor EN MILES a pesos colombianos (ej. 70 -> "$70 mil", 1200 -> "$1,2 M")
@@ -1911,7 +1933,22 @@ function App() {
                     React.createElement('span', null, 'Pendiente por pagar'),
                     React.createElement('strong', {style:{color: pend > 0 ? '#b91c1c' : '#1D9E75'}}, pend > 0 ? fmtCol(pend * 1000) : 'Al día ✅')
                   ),
-                  pend > 0 && React.createElement('button', {onClick:()=>pagarProfesor(t), style:{marginTop:8, width:'100%'}}, '💵 Marcar como pagado')
+                  pend > 0 && React.createElement('div', {style:{display:'flex', gap:8, marginTop:8}},
+                    React.createElement('button', {onClick:()=>abonoProfesor(t), style:{flex:1, background:'#f0f7ff', color:'#1d4ed8', border:'1px solid #bfdbfe'}}, '💸 Poner abono'),
+                    React.createElement('button', {onClick:()=>pagarProfesor(t), className:'primary', style:{flex:1}}, '✅ Total pagado')
+                  ),
+                  pend <= 0 && React.createElement('div', {style:{fontSize:12, color:'var(--muted)', marginTop:8}}, 'Sin saldo pendiente con este profesor.'),
+                  (() => {
+                    const hist = (pagos && pagos[t.id]) ? (Array.isArray(pagos[t.id]) ? pagos[t.id] : Object.values(pagos[t.id])) : [];
+                    if (!hist.length) return null;
+                    return React.createElement('div', {style:{marginTop:10, paddingTop:8, borderTop:'1px dashed var(--card-border)'}},
+                      React.createElement('div', {style:{fontSize:12, fontWeight:600, color:'var(--muted)', marginBottom:4}}, 'Historial de pagos'),
+                      hist.slice().reverse().map((p, i) => React.createElement('div', {key:'pg-'+i, style:{display:'flex', justifyContent:'space-between', fontSize:12, padding:'2px 0', color:'var(--muted)'}},
+                        React.createElement('span', null, `📅 ${p.fecha || '—'}`),
+                        React.createElement('strong', {style:{color:'#1D9E75'}}, fmtCol((Number(p.monto) || 0) * 1000))
+                      ))
+                    );
+                  })()
                 );
               })()
             )
