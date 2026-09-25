@@ -1036,14 +1036,32 @@ function App() {
   const deleteStudent = async (id) => {
     const student = students.find(s => s.id === id);
     if(!student) return;
+    const nom = student.name.trim().toLowerCase();
+    // Clases del estudiante: las activas (pendientes/aplazadas) se borran, las dictadas y canceladas se conservan
+    const suyas = classes.filter(c => (c.student || '').trim().toLowerCase() === nom);
+    const aBorrar = suyas.filter(c => isActiveClass(c));
+    const aGuardar = suyas.filter(c => !isActiveClass(c));
+    const msg = aBorrar.length
+      ? `¿Eliminar a ${student.name}?\n\nSe borrarán ${aBorrar.length} clase(s) pendiente(s) suyas.\nSe conservarán ${aGuardar.length} clase(s) ya dictadas o canceladas (historial).\n\nEsta acción se puede deshacer.`
+      : `¿Eliminar a ${student.name} de la lista de cobros?\n\nNo tiene clases pendientes.${aGuardar.length ? `\nSe conservarán ${aGuardar.length} clase(s) ya dictadas.` : ''}\n\nEsta acción se puede deshacer.`;
+    if(!confirm(msg)) return;
     const prevStudents = students;
-    const updated = students.filter(s => s.id !== id);
-    setStudents(updated);
-    await writeData('blue/students', updated);
-    logAction('Eliminó estudiante de cobros', student.name);
-    showUndo(`${student.name} eliminado(a) de cobros`, async () => {
+    const prevClasses = classes;
+    const updatedStudents = students.filter(s => s.id !== id);
+    // Borra las clases activas del estudiante, conserva el resto (dictadas, canceladas y de otros)
+    const idsBorrar = new Set(aBorrar.map(c => c.id));
+    const updatedClasses = classes.filter(c => !idsBorrar.has(c.id));
+    setStudents(updatedStudents);
+    setClasses(updatedClasses);
+    await writeData('blue/students', updatedStudents);
+    await writeData('blue/classes', updatedClasses);
+    logAction('Eliminó estudiante', aBorrar.length ? `${student.name} · ${aBorrar.length} clase(s) pendiente(s) borrada(s), ${aGuardar.length} en historial` : student.name);
+    notify(aBorrar.length ? `Estudiante y ${aBorrar.length} clase(s) pendiente(s) eliminadas 🗑️` : 'Estudiante eliminado 🗑️');
+    showUndo('Eliminación deshecha', async () => {
       setStudents(prevStudents);
+      setClasses(prevClasses);
       await writeData('blue/students', prevStudents);
+      await writeData('blue/classes', prevClasses);
     });
   };
 
@@ -2073,9 +2091,9 @@ function App() {
                   React.createElement('strong', null, s.name),
                   React.createElement('div', {style:{fontSize:12, color:'var(--muted)'}}, `$${s.price.toLocaleString()} por hora`)
                 ),
-                React.createElement('div', null,
+                React.createElement('div', {style:{display:'flex', gap:6}},
                   React.createElement('button', {onClick:()=>{setEditingStudent(s); setEditStudentForm({name:s.name, price:String(s.price)});}}, '✏️'),
-                  React.createElement('button', {onClick:()=>deleteStudent(s.id), className:'danger'}, '🗑️')
+                  React.createElement('button', {onClick:()=>deleteStudent(s.id), className:'danger', title:`Eliminar a ${s.name} y borrar sus clases pendientes (las dictadas se conservan)`}, '🗑️ Eliminar')
                 )
               ) : React.createElement('div', null,
                 React.createElement('input', {value:editStudentForm.name, onChange:e=>setEditStudentForm({...editStudentForm, name:e.target.value})}),
