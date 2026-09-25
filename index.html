@@ -439,7 +439,7 @@ function App() {
   const [newCls, setNewCls] = useState({student:'', date: getTodayDate(), hour:'7:00', teacherId: null, status:'pending', doneDate:null, duration:null, repeat:false, repeatWeeks:4, direccion:'', notas:''});
   const [assigningId, setAssigningId] = useState(null);
   const [editingTeacher, setEditingTeacher] = useState(null);
-  const [editForm, setEditForm] = useState({name:'', telefono:'', notas:'', fechaInicio:'', pagoFijo:''});
+  const [editForm, setEditForm] = useState({name:'', telefono:'', notas:'', fechaInicio:'', pagoFijo:'', pagoTransporte:'10'});
   const [selectedTeacherId, setSelectedTeacherId] = useState(null);
   const [searchText, setSearchText] = useState('');
   const [editingClass, setEditingClass] = useState(null);
@@ -914,7 +914,8 @@ function App() {
     setTeacherErrors(errs);
     if(Object.keys(errs).length > 0) return;
     const pagoFijo = editForm.pagoFijo === '' ? (t.pagoFijo || 0) : (parseInt(editForm.pagoFijo) || 0);
-    const newTeachers = teachers.map(t => t.id === editingTeacher.id ? {...t, name: editForm.name.trim(), telefono: editForm.telefono.trim(), notas: editForm.notas.trim(), fechaInicio: editForm.fechaInicio || t.fechaInicio || '', pagoFijo} : t);
+    const pagoTransporte = editForm.pagoTransporte === '' ? (t.pagoTransporte !== undefined ? t.pagoTransporte : 10) : (parseInt(editForm.pagoTransporte) || 0);
+    const newTeachers = teachers.map(t => t.id === editingTeacher.id ? {...t, name: editForm.name.trim(), telefono: editForm.telefono.trim(), notas: editForm.notas.trim(), fechaInicio: editForm.fechaInicio || t.fechaInicio || '', pagoFijo, pagoTransporte} : t);
     setTeachers(newTeachers);
     await writeData('blue/teachers', newTeachers);
     logAction('Editó profesor', editForm.name.trim());
@@ -1108,10 +1109,16 @@ function App() {
     if (precio >= 92000) return 80;
     return 70;
   };
-  // Cuánto le pagó Blue a un profe por todas sus clases dictadas (suma)
+  // Cuánto se le paga al profesor por clase con transporte (en miles). Por defecto $10.000
+  const pagoTransporteDe = (profe) => {
+    const v = profe ? profe.pagoTransporte : undefined;
+    return (v === undefined || v === null || v === '') ? 10 : (Number(v) || 0);
+  };
+  // Cuánto le pagó Blue a un profe por todas sus clases dictadas (suma, incluye transporte)
   const totalPagadoProfe = (profe) => {
     const done = classes.filter(c => c.status === 'done' && String(c.teacherId) === String(profe.id));
-    return done.reduce((s, c) => s + parseDurationToHours(c.duration) * pagoProfePorHora(profe, c), 0);
+    const tp = pagoTransporteDe(profe);
+    return done.reduce((s, c) => s + parseDurationToHours(c.duration) * pagoProfePorHora(profe, c) + (c.transporte ? tp : 0), 0);
   };
   // Total ya registrado como pagado al profe (suma de blue/pagos[teacherId])
   const totalPagadoRegistrado = (profe) => {
@@ -1929,6 +1936,15 @@ function App() {
                     React.createElement('span', null, 'Total ya pagado'),
                     React.createElement('strong', null, fmtCol(yaPago * 1000))
                   ),
+                  (() => {
+                    const tp = pagoTransporteDe(t);
+                    const nT = classes.filter(c => c.status === 'done' && String(c.teacherId) === String(t.id) && c.transporte).length;
+                    if (!nT) return null;
+                    return React.createElement('div', {style:{display:'flex', justifyContent:'space-between', fontSize:12, padding:'2px 0', color:'var(--muted)'}},
+                      React.createElement('span', null, `🚗 Transporte (${nT} clase${nT===1?'':'s'} × ${fmtMiles(tp)})`),
+                      React.createElement('strong', null, fmtCol(nT * tp * 1000))
+                    );
+                  })(),
                   React.createElement('div', {style:{display:'flex', justifyContent:'space-between', fontSize:13, padding:'2px 0'}},
                     React.createElement('span', null, 'Pendiente por pagar'),
                     React.createElement('strong', {style:{color: pend > 0 ? '#b91c1c' : '#1D9E75'}}, pend > 0 ? fmtCol(pend * 1000) : 'Al día ✅')
@@ -2077,7 +2093,7 @@ function App() {
                 React.createElement('div', {style:{display:'flex', gap:4, flexWrap:'wrap'}},
                   React.createElement('button', {onClick:()=>{setViewTeacherProfile(t); setTProfileMonth(()=>{const d=new Date(); d.setDate(1); return d;}); setTProfileDay(null);}}, '👁️ Ver perfil'),
                   waNumber && React.createElement('a', {href:`https://wa.me/${waNumber}`, target:'_blank', rel:'noopener noreferrer', style:{textDecoration:'none'}}, React.createElement('button', null, '💬')),
-                  React.createElement('button', {onClick:()=>{setEditingTeacher(t); setEditForm({name:t.name, telefono:t.telefono||'', notas:t.notas||'', fechaInicio:t.fechaInicio||'', pagoFijo: String(t.pagoFijo ?? '')}); setTeacherErrors({});}}, '✏️'),
+                  React.createElement('button', {onClick:()=>{setEditingTeacher(t); setEditForm({name:t.name, telefono:t.telefono||'', notas:t.notas||'', fechaInicio:t.fechaInicio||'', pagoFijo: String(t.pagoFijo ?? ''), pagoTransporte: String(t.pagoTransporte ?? '10')}); setTeacherErrors({});}}, '✏️'),
                   React.createElement('button', {onClick:()=>deleteTeacher(t.id), className:'danger'}, '🗑️')
                 )
               ),
@@ -2095,6 +2111,9 @@ function App() {
               React.createElement('label', {style:{fontSize:12, color:'var(--muted)'}}, '💰 Pago por hora a este profesor (solo si es fijo, ej: Juli = 75):'),
               React.createElement('input', {type:'number', placeholder:'Dejar vacío usa la regla automática ($70, $80 si cobra $92)', value:editForm.pagoFijo, onChange:e=>setEditForm({...editForm, pagoFijo:e.target.value})}),
               React.createElement('div', {style:{fontSize:11, color:'var(--muted)', marginTop:-4}}, 'Automático: $70/h normalmente y $80/h cuando se le cobra $92 al papá.'),
+              React.createElement('label', {style:{fontSize:12, color:'var(--muted)', marginTop:10}}, '🚗 Pago por transporte (en miles, se suma por cada clase marcada con transporte):'),
+              React.createElement('input', {type:'number', placeholder:'10 = $10.000 por clase', value:editForm.pagoTransporte, onChange:e=>setEditForm({...editForm, pagoTransporte:e.target.value})}),
+              React.createElement('div', {style:{fontSize:11, color:'var(--muted)', marginTop:-4}}, 'Por defecto $10.000 por clase con transporte. Dejar 0 si no se le paga transporte.'),
               React.createElement('button', {className:'primary', onClick:updateTeacher}, 'Guardar'),
               React.createElement('button', {onClick:()=>{setEditingTeacher(null); setTeacherErrors({});}}, 'Cancelar')
             )
