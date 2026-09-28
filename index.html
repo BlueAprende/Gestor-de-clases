@@ -430,6 +430,7 @@ function App() {
   const [classes, setClasses] = useState([]);
   const [avail, setAvail] = useState({});
   const [pagos, setPagos] = useState({});
+  const [historialProfe, setHistorialProfe] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [tab, setTab] = useState('clases');
@@ -1130,7 +1131,7 @@ function App() {
     const ganado = totalPagadoProfe(profe) * 1000;
     const yaPagado = totalPagadoRegistrado(profe) * 1000;
     const pendiente = Math.max(0, ganado - yaPagado);
-    if (pendiente <= 0) { notify('No hay monto pendiente por pagar'); return; }
+    if (pendiente <= 0) { registrarPagoManual(profe, yaPagado); return; }
     const lista = (pagos && pagos[profe.id] && Array.isArray(pagos[profe.id])) ? [...pagos[profe.id]] : [];
     lista.push({ fecha: getTodayDate(), monto: pendiente / 1000 });
     writeData(`blue/pagos/${profe.id}`, lista);
@@ -1138,12 +1139,28 @@ function App() {
     notify(`Pago registrado a ${profe.name}: ${fmtCol(pendiente)} 💵`);
     logAction(`Pagó a ${profe.name}`, fmtCol(pendiente));
   };
+  // Si el saldo da 0 pero igual se pagó algo (datos desfasados), permite escribir el monto a mano
+  const registrarPagoManual = (profe, yaPagado) => {
+    const entrada = prompt(`A ${profe.name} le aparece saldo 0 en la app.\n\nTotal pagado: ${fmtCol(yaPagado)}\n\nSi igual le entregaste dinero, escribe el monto en pesos (ej: 50000 o 50.000).\nDeja vacío si no fue nada.`,
+      '');
+    if (entrada === null) return;
+    const limpio = entrada.replace(/[^\d]/g, '');
+    if(!limpio) { notify('No se registró nada'); return; }
+    const monto = parseInt(limpio, 10);
+    if(isNaN(monto) || monto <= 0) { notify('Monto inválido', 'error'); return; }
+    const lista = (pagos && pagos[profe.id] && Array.isArray(pagos[profe.id])) ? [...pagos[profe.id]] : [];
+    lista.push({ fecha: getTodayDate(), monto: monto / 1000 });
+    writeData(`blue/pagos/${profe.id}`, lista);
+    setPagos({ ...(pagos || {}), [profe.id]: lista });
+    notify(`Pago registrado a ${profe.name}: ${fmtCol(monto)} 💵`);
+    logAction(`Pagó a ${profe.name}`, fmtCol(monto));
+  };
   // Registra un abono (pago parcial) al profe: se descuenta del pendiente
   const abonoProfesor = (profe) => {
     const ganado = totalPagadoProfe(profe) * 1000;
     const yaPagado = totalPagadoRegistrado(profe) * 1000;
     const pendiente = Math.max(0, ganado - yaPagado);
-    if (pendiente <= 0) { notify('No hay monto pendiente por pagar'); return; }
+    if (pendiente <= 0) { registrarPagoManual(profe, yaPagado); return; }
     const entrada = prompt(`¿Cuánto le entregaste a ${profe.name}?\n\nPendiente actual: ${fmtCol(pendiente)}\n\nEscribe el monto en pesos (ej: 50000 o 50.000)`,
       String(Math.round(pendiente)));
     if (entrada === null) return;
@@ -1151,7 +1168,7 @@ function App() {
     if(!limpio) { notify('Monto inválido', 'error'); return; }
     const monto = parseInt(limpio, 10);
     if(isNaN(monto) || monto <= 0) { notify('Monto inválido', 'error'); return; }
-    if(monto > pendiente) { notify(`No puede ser mayor al pendiente (${fmtCol(pendiente)})`, 'error'); return; }
+    if(monto > pendiente && !confirm(`El monto (${fmtCol(monto)}) es MAYOR al pendiente (${fmtCol(pendiente)}).\n\n¿Registrarlo de todas formas?`)) return;
     const lista = (pagos && pagos[profe.id] && Array.isArray(pagos[profe.id])) ? [...pagos[profe.id]] : [];
     lista.push({ fecha: getTodayDate(), monto: monto / 1000 });
     writeData(`blue/pagos/${profe.id}`, lista);
@@ -1160,6 +1177,8 @@ function App() {
     notify(`Abono de ${fmtCol(monto)} a ${profe.name} · quedan ${fmtCol(resta)}`);
     logAction(`Abono a ${profe.name}`, fmtCol(monto));
   };
+  // Abre el modal con el historial de pagos de un profe
+  const abrirHistorialPagos = (profe) => { setHistorialProfe(profe); };
   // ¿El profe tiene alguna clase cobrada al papá en $92? (para saber si aplica tarifa de $80)
   const tieneClases92 = (profe) => classes.some(c => String(c.teacherId) === String(profe.id) && precioPapáDeClase(c) >= 92000);
   // Formatea un valor EN MILES a pesos colombianos (ej. 70 -> "$70 mil", 1200 -> "$1,2 M")
@@ -1949,22 +1968,19 @@ function App() {
                     React.createElement('span', null, 'Pendiente por pagar'),
                     React.createElement('strong', {style:{color: pend > 0 ? '#b91c1c' : '#1D9E75'}}, pend > 0 ? fmtCol(pend * 1000) : 'Al día ✅')
                   ),
-                  pend > 0 && React.createElement('div', {style:{display:'flex', gap:8, marginTop:8}},
+                  React.createElement('div', {style:{display:'flex', gap:8, marginTop:8}},
                     React.createElement('button', {onClick:()=>abonoProfesor(t), style:{flex:1, background:'#f0f7ff', color:'#1d4ed8', border:'1px solid #bfdbfe'}}, '💸 Poner abono'),
-                    React.createElement('button', {onClick:()=>pagarProfesor(t), className:'primary', style:{flex:1}}, '✅ Total pagado')
+                    React.createElement('button', {onClick:()=>pagarProfesor(t), className:'primary', style:{flex:1}}, '✅ Marcar todo pagado')
                   ),
-                  pend <= 0 && React.createElement('div', {style:{fontSize:12, color:'var(--muted)', marginTop:8}}, 'Sin saldo pendiente con este profesor.'),
                   (() => {
                     const hist = (pagos && pagos[t.id]) ? (Array.isArray(pagos[t.id]) ? pagos[t.id] : Object.values(pagos[t.id])) : [];
                     if (!hist.length) return null;
-                    return React.createElement('div', {style:{marginTop:10, paddingTop:8, borderTop:'1px dashed var(--card-border)'}},
-                      React.createElement('div', {style:{fontSize:12, fontWeight:600, color:'var(--muted)', marginBottom:4}}, 'Historial de pagos'),
-                      hist.slice().reverse().map((p, i) => React.createElement('div', {key:'pg-'+i, style:{display:'flex', justifyContent:'space-between', fontSize:12, padding:'2px 0', color:'var(--muted)'}},
-                        React.createElement('span', null, `📅 ${p.fecha || '—'}`),
-                        React.createElement('strong', {style:{color:'#1D9E75'}}, fmtCol((Number(p.monto) || 0) * 1000))
-                      ))
+                    return React.createElement('div', {style:{marginTop:8, display:'flex', justifyContent:'space-between', alignItems:'center'}},
+                      React.createElement('span', {style:{fontSize:12, color:'var(--muted)'}}, `📋 ${hist.length} pago${hist.length===1?'':'s'} registrado${hist.length===1?'':'s'}`),
+                      React.createElement('button', {style:{fontSize:12, padding:'2px 8px', background:'transparent', color:'var(--muted)', border:'1px solid var(--card-border)'}, onClick:()=>abrirHistorialPagos(t)}, 'Ver historial →')
                     );
-                  })()
+                  })(),
+                  React.createElement('div', {style:{fontSize:11, color:'var(--muted)', marginTop:6}}, '💡 Si te aparece «Al día» pero igual le pagaste, usa el botón igual y escribe el monto a mano.')
                 );
               })()
             )
@@ -2121,6 +2137,41 @@ function App() {
         });
         })()
         )),
+        historialProfe && React.createElement('div', {className:'card', style:{marginTop:12, borderColor:'#1D9E75'}},
+          React.createElement('div', {style:{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8}},
+            React.createElement('strong', null, `💵 Pagos a ${historialProfe.name}`),
+            React.createElement('button', {onClick:()=>setHistorialProfe(null), style:{padding:'2px 10px', fontSize:12}}, '✕ Cerrar')
+          ),
+          (() => {
+            const hist = (pagos && pagos[historialProfe.id]) ? (Array.isArray(pagos[historialProfe.id]) ? pagos[historialProfe.id] : Object.values(pagos[historialProfe.id])) : [];
+            const suma = hist.reduce((s, p) => s + (Number(p.monto) || 0), 0);
+            const ganado = totalPagadoProfe(historialProfe);
+            const pend = Math.max(0, ganado - suma);
+            return React.createElement('div', null,
+              React.createElement('div', {style:{display:'flex', justifyContent:'space-between', padding:'6px 0', borderBottom:'2px solid var(--card-border)'}},
+                React.createElement('span', null, 'Total pagado'),
+                React.createElement('strong', {style:{color:'#1D9E75'}}, fmtCol(suma * 1000))
+              ),
+              React.createElement('div', {style:{display:'flex', justifyContent:'space-between', padding:'6px 0', borderBottom:'1px dashed var(--card-border)'}},
+                React.createElement('span', null, 'Ganado en clases dictadas'),
+                React.createElement('strong', null, fmtCol(ganado * 1000))
+              ),
+              React.createElement('div', {style:{display:'flex', justifyContent:'space-between', padding:'6px 0', marginBottom:8}},
+                React.createElement('span', {style:{fontWeight:600}}, 'Pendiente por pagar'),
+                React.createElement('strong', {style:{color: pend > 0 ? '#b91c1c' : '#1D9E75'}}, pend > 0 ? fmtCol(pend * 1000) : 'Al día ✅')
+              ),
+              hist.length === 0
+                ? React.createElement('div', {style:{color:'var(--muted)', fontSize:13, padding:'8px 0'}}, 'Todavía no hay pagos registrados a este profesor.')
+                : React.createElement('div', null,
+                    React.createElement('div', {style:{fontSize:12, fontWeight:600, color:'var(--muted)', marginBottom:4}}, 'Historial'),
+                    hist.slice().reverse().map((p, i) => React.createElement('div', {key:'hp-'+i, style:{display:'flex', justifyContent:'space-between', fontSize:13, padding:'6px 0', borderBottom:'1px solid var(--card-border)'}},
+                      React.createElement('span', null, `📅 ${p.fecha || '—'}`),
+                      React.createElement('strong', {style:{color:'#1D9E75'}}, fmtCol((Number(p.monto) || 0) * 1000))
+                    ))
+                  )
+            );
+          })()
+        ),
       tab === 'cobros' && React.createElement('div', null,
         React.createElement('div', {style:{display:'flex', gap:8, marginBottom:16, flexWrap:'wrap'}},
           ['ninos','totales','reporte'].map(st =>
