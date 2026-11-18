@@ -1,4 +1,4 @@
-const CACHE_NAME = 'blue-app-v5';
+const CACHE_NAME = 'blue-app-v7';
 const APP_SHELL = [
   './index.html',
   './manifest.json',
