@@ -118,6 +118,42 @@
     .cal-cell{min-height:40px;font-size:10px}
     .undo-toast,.toast{width:calc(100% - 32px);left:16px;transform:none;text-align:center;justify-content:center}
   }
+
+  /* Festivos de Colombia en calendarios */
+  .cal-cell.is-holiday{border-color:#fca5a5;background:#fff5f5}
+  body.dark .cal-cell.is-holiday{border-color:#7f1d1d;background:#2d1515}
+  .cal-cell.is-holiday.has-classes{background:#e8f4ed;border-color:#1D9E75}
+  body.dark .cal-cell.is-holiday.has-classes{background:#1c3830;border-color:#1D9E75}
+  .cal-holiday-tag{font-size:9px;color:#dc2626;font-weight:700;line-height:1.1;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  body.dark .cal-holiday-tag{color:#f87171}
+
+  /* Modal Cuenta de Cobro y estilos de impresión */
+  .modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.65);z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px;overflow-y:auto}
+  .modal-box{background:var(--card-bg);border:1px solid var(--card-border);border-radius:14px;width:100%;max-width:700px;max-height:92vh;overflow-y:auto;padding:22px;box-shadow:0 12px 36px rgba(0,0,0,0.35)}
+  .tbl-cobro{width:100%;border-collapse:collapse;font-size:12px;margin:12px 0}
+  .tbl-cobro th,.tbl-cobro td{padding:8px 6px;border-bottom:1px solid var(--card-border);text-align:left}
+  .tbl-cobro th{background:var(--stat-bg);font-weight:700;color:var(--text)}
+  .tbl-cobro td.num,.tbl-cobro th.num{text-align:right}
+  @media print {
+    body * { visibility: hidden !important; }
+    #cuenta-cobro-printable, #cuenta-cobro-printable * { visibility: visible !important; }
+    #cuenta-cobro-printable {
+      position: absolute !important;
+      left: 0 !important;
+      top: 0 !important;
+      width: 100% !important;
+      margin: 0 !important;
+      padding: 30px !important;
+      background: #ffffff !important;
+      color: #000000 !important;
+      box-shadow: none !important;
+      border: none !important;
+      font-size: 11pt !important;
+    }
+    .no-print { display: none !important; }
+    .tbl-cobro th { background: #f3f4f6 !important; color: #111 !important; border-bottom: 2px solid #ccc !important; }
+    .tbl-cobro th, .tbl-cobro td { border-bottom: 1px solid #e5e7eb !important; }
+  }
 </style>
 </head>
 
@@ -201,6 +237,47 @@ function playChime() {
     if (navigator.vibrate) { try { navigator.vibrate([250, 100, 250]); } catch(e) {} }
   } catch (e) {}
 }
+const COLOMBIA_HOLIDAYS = {
+  // 2026
+  '2026-01-01': 'Año Nuevo',
+  '2026-01-12': 'Reyes Magos',
+  '2026-03-23': 'Día de San José',
+  '2026-04-02': 'Jueves Santo',
+  '2026-04-03': 'Viernes Santo',
+  '2026-05-01': 'Día del Trabajo',
+  '2026-05-18': 'Ascensión del Señor',
+  '2026-06-08': 'Corpus Christi',
+  '2026-06-15': 'Sagrado Corazón de Jesús',
+  '2026-06-29': 'San Pedro y San Pablo',
+  '2026-07-20': 'Día de la Independencia',
+  '2026-08-07': 'Batalla de Boyacá',
+  '2026-08-17': 'Asunción de la Virgen',
+  '2026-10-12': 'Día de la Raza',
+  '2026-11-02': 'Todos los Santos',
+  '2026-11-16': 'Independencia de Cartagena',
+  '2026-12-08': 'Inmaculada Concepción',
+  '2026-12-25': 'Navidad',
+  // 2027
+  '2027-01-01': 'Año Nuevo',
+  '2027-01-11': 'Reyes Magos',
+  '2027-03-22': 'Día de San José',
+  '2027-03-25': 'Jueves Santo',
+  '2027-03-26': 'Viernes Santo',
+  '2027-05-01': 'Día del Trabajo',
+  '2027-05-10': 'Ascensión del Señor',
+  '2027-05-31': 'Corpus Christi',
+  '2027-06-07': 'Sagrado Corazón',
+  '2027-07-05': 'San Pedro y San Pablo',
+  '2027-07-20': 'Día de la Independencia',
+  '2027-08-07': 'Batalla de Boyacá',
+  '2027-08-16': 'Asunción de la Virgen',
+  '2027-10-18': 'Día de la Raza',
+  '2027-11-01': 'Todos los Santos',
+  '2027-11-15': 'Independencia de Cartagena',
+  '2027-12-08': 'Inmaculada Concepción',
+  '2027-12-25': 'Navidad'
+};
+
 const hourBlock = (h) => String(h).split(':')[0] + ':00';
 
 let db = null;
@@ -353,6 +430,8 @@ function TeacherCalendar({ teacher, classes, month, setMonth, selectedDay, setSe
     return classes.filter(c => c.date === dateStr && c.teacherId === teacher.id);
   };
   const dayClasses = selectedDay ? classesForDay(selectedDay) : [];
+  const selDateStr = selectedDay ? `${year}-${pad(monthIdx + 1)}-${pad(selectedDay)}` : null;
+  const selHoliday = selDateStr ? COLOMBIA_HOLIDAYS[selDateStr] : null;
   return React.createElement('div', null,
     React.createElement('div', { className: 'row', style: { justifyContent: 'space-between', marginBottom: 10 } },
       React.createElement('button', { onClick: () => setMonth(new Date(year, monthIdx - 1, 1)) }, '←'),
@@ -365,20 +444,24 @@ function TeacherCalendar({ teacher, classes, month, setMonth, selectedDay, setSe
     React.createElement('div', { className: 'cal-grid' },
       cells.map((d, i) => {
         if (d === null) return React.createElement('div', { key: 'b' + i });
+        const dateStr = `${year}-${pad(monthIdx + 1)}-${pad(d)}`;
+        const holiday = COLOMBIA_HOLIDAYS[dateStr];
         const dc = classesForDay(d);
         const isSel = selectedDay === d;
         const hasPending = dc.some(c => c.status === 'pending');
         return React.createElement('div', {
           key: d,
           onClick: () => setSelectedDay(isSel ? null : d),
-          className: `cal-cell ${dc.length > 0 ? 'has-classes' : ''} ${hasPending ? 'has-pending' : ''} ${isSel ? 'selected' : ''}`
+          className: `cal-cell ${holiday ? 'is-holiday' : ''} ${dc.length > 0 ? 'has-classes' : ''} ${hasPending ? 'has-pending' : ''} ${isSel ? 'selected' : ''}`
         },
-          React.createElement('div', { className: 'cal-daynum' }, d),
+          React.createElement('div', { className: 'cal-daynum', style: holiday ? { color: '#dc2626', fontWeight: 700 } : {} }, d),
+          holiday && React.createElement('div', { className: 'cal-holiday-tag', title: holiday }, '🇨🇴 ' + holiday),
           dc.length > 0 && React.createElement('div', null, `${dc.length} clase${dc.length > 1 ? 's' : ''}`)
         );
       })
     ),
     selectedDay && React.createElement('div', { style: { marginTop: 12 } },
+      selHoliday && React.createElement('div', { style: { background: '#fee2e2', border: '1px solid #fecaca', color: '#991b1b', padding: '6px 10px', borderRadius: 8, marginBottom: 8, fontSize: 13, fontWeight: 600 } }, `🇨🇴 Festivo nacional: ${selHoliday}`),
       React.createElement('h4', null, `Clases del ${selectedDay} de ${month.toLocaleDateString('es-ES', { month: 'long' })}`),
       dayClasses.length === 0 && React.createElement('div', null, 'No hay clases este día.'),
       dayClasses.map(c => React.createElement('div', { key: c.id, style: { padding: '6px 0', borderBottom: '1px solid var(--card-border)' } },
@@ -465,6 +548,8 @@ function App() {
   const [profesSortBy, setProfesSortBy] = useState('nombre');
   const [viewTeacherProfile, setViewTeacherProfile] = useState(null);
   const [tProfileMonth, setTProfileMonth] = useState(()=>{const d=new Date(); d.setDate(1); return d;});
+  const [cuentaCobroModal, setCuentaCobroModal] = useState(null);
+  const [cuentaCobroMes, setCuentaCobroMes] = useState('all');
   const [tProfileDay, setTProfileDay] = useState(null);
   const [profileStudentFilter, setProfileStudentFilter] = useState('all');
   const [collapsePendientes, setCollapsePendientes] = useState(false);
@@ -1093,6 +1178,24 @@ function App() {
     notify(esMesPagado(student, yyyymm) ? 'Mes marcado como pendiente' : 'Pago registrado ✅');
   };
 
+  const saldarDeudaEstudiante = async (student) => {
+    const clasesDictadas = classes.filter(c => c.status === 'done' && (c.student || '').trim().toLowerCase() === (student.name || '').trim().toLowerCase());
+    const meses = [...new Set(clasesDictadas.map(c => (c.date||'').slice(0,7)))].filter(m => m && /^\d{4}-\d{2}$/.test(m) && !esMesPagado(student, m));
+    if (meses.length === 0) {
+      notify('El estudiante ya está al día ✓');
+      return;
+    }
+    const newPagos = { ...(student.pagos || {}) };
+    meses.forEach(m => {
+      newPagos[m] = { pagado: true, fecha: new Date().toISOString() };
+    });
+    const updated = students.map(s => s.id === student.id ? { ...s, pagos: newPagos } : s);
+    setStudents(updated);
+    await writeData('blue/students', updated);
+    logAction('Saldó deuda acumulada', `${student.name} · ${meses.join(', ')}`);
+    notify(`¡Deuda saldada (${meses.length} mes${meses.length > 1 ? 'es' : ''}) para ${student.name}! ✅`);
+  };
+
   // ===== Pago a profesores =====
   // Cuánto le cobra Blue al papá por una clase (según el precio del estudiante)
   const precioPapáDeClase = (clase) => {
@@ -1660,6 +1763,163 @@ function App() {
         React.createElement('p', {style:{fontSize:12, color:'var(--muted)', marginBottom:10}}, 'Descarga el .ics e impórtalo en Google Calendar para tener tu horario en el teléfono 📱'),
         React.createElement(TeacherCalendar, {teacher:curTeacher, classes, month:tCalMonth, setMonth:setTCalMonth, selectedDay:tCalDay, setSelectedDay:setTCalDay})
       ),
+            cuentaCobroModal && (() => {
+        const t = cuentaCobroModal;
+        const mesesDisponibles = [...new Set(classes.filter(c => c.status === 'done' && String(c.teacherId) === String(t.id)).map(c => (c.date || '').slice(0, 7)))].filter(Boolean).sort().reverse();
+        const clasesDictadas = classes.filter(c => c.status === 'done' && String(c.teacherId) === String(t.id) && (cuentaCobroMes === 'all' || (c.date || '').startsWith(cuentaCobroMes)))
+          .sort((a,b) => (a.date||'').localeCompare(b.date||'') || (a.hour||'').localeCompare(b.hour||''));
+        const totalHoras = clasesDictadas.reduce((s, c) => s + parseDurationToHours(c.duration), 0);
+        const totalHonorarios = clasesDictadas.reduce((s, c) => s + parseDurationToHours(c.duration) * pagoProfePorHora(t, c) * 1000, 0);
+        const totalTransporte = clasesDictadas.reduce((s, c) => s + (c.transporte ? pagoTransporteDe(t) * 1000 : 0), 0);
+        const totalPagar = totalHonorarios + totalTransporte;
+        const perNom = cuentaCobroMes === 'all' ? 'Todas las fechas' : new Date(cuentaCobroMes + '-02T00:00:00').toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+
+        const copiarResumenWA = () => {
+          let txt = `📄 *CUENTA DE COBRO - BLUE*\n`;
+          txt += `👤 *Profesor(a):* ${t.name}\n`;
+          if (t.telefono) txt += `📱 *Tel:* ${t.telefono}\n`;
+          txt += `🗓️ *Período:* ${perNom.charAt(0).toUpperCase() + perNom.slice(1)}\n`;
+          txt += `📅 *Fecha de emisión:* ${getTodayDate()}\n`;
+          txt += `--------------------------------\n`;
+          txt += `📚 *CLASES DICTADAS (${clasesDictadas.length}):*\n`;
+          clasesDictadas.forEach(c => {
+            const h = parseDurationToHours(c.duration);
+            const tar = pagoProfePorHora(t, c) * 1000;
+            const trp = c.transporte ? ` + ${(pagoTransporteDe(t)*1000).toLocaleString('es-CO')} transp.` : '';
+            const sub = (h * tar) + (c.transporte ? pagoTransporteDe(t)*1000 : 0);
+            txt += `• ${c.date.slice(5)} ${c.hour} | ${c.student} (${formatHours(h)} @ ${tar.toLocaleString('es-CO')}${trp}) = ${sub.toLocaleString('es-CO')}\n`;
+          });
+          txt += `--------------------------------\n`;
+          txt += `⏱️ *Total horas:* ${formatHours(totalHoras)}\n`;
+          if (totalTransporte > 0) txt += `🚗 *Total transporte:* ${totalTransporte.toLocaleString('es-CO')}\n`;
+          txt += `💰 *TOTAL A PAGAR: ${totalPagar.toLocaleString('es-CO')}*\n`;
+          txt += `--------------------------------\n`;
+          txt += `Generado automáticamente por BLUE 💙`;
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(txt).then(() => notify('¡Cuenta de cobro copiada para WhatsApp! 📋'))
+              .catch(() => prompt('Copia el texto:', txt));
+          } else {
+            prompt('Copia el texto:', txt);
+          }
+        };
+
+        return React.createElement('div', {className:'modal-overlay', onClick:()=>setCuentaCobroModal(null)},
+          React.createElement('div', {className:'modal-box', onClick:e=>e.stopPropagation()},
+            React.createElement('div', {className:'no-print', style:{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12}},
+              React.createElement('div', {style:{display:'flex', gap:8, alignItems:'center', flexWrap:'wrap'}},
+                React.createElement('span', {style:{fontSize:13, fontWeight:600}}, '🗓️ Período:'),
+                React.createElement('select', {value:cuentaCobroMes, onChange:e=>setCuentaCobroMes(e.target.value), style:{width:'auto', marginBottom:0}},
+                  React.createElement('option', {value:'all'}, 'Todas las clases dictadas'),
+                  mesesDisponibles.map(m => {
+                    const mNom = new Date(m + '-02T00:00:00').toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+                    return React.createElement('option', {key:m, value:m}, mNom.charAt(0).toUpperCase() + mNom.slice(1));
+                  })
+                )
+              ),
+              React.createElement('button', {onClick:()=>setCuentaCobroModal(null), style:{padding:'4px 10px', fontSize:14}}, '✕ Cerrar')
+            ),
+
+            React.createElement('div', {id:'cuenta-cobro-printable'},
+              React.createElement('div', {style:{borderBottom:'2px solid #1D9E75', paddingBottom:12, marginBottom:16, display:'flex', justifyContent:'space-between', alignItems:'flex-start', flexWrap:'wrap', gap:10}},
+                React.createElement('div', null,
+                  React.createElement('div', {style:{fontSize:22, fontWeight:800, color:'#1D9E75', letterSpacing:'-0.02em'}}, 'BLUE'),
+                  React.createElement('div', {style:{fontSize:11, color:'var(--muted)', textTransform:'uppercase', letterSpacing:'0.05em'}}, 'Acompañamiento y Gestión de Clases')
+                ),
+                React.createElement('div', {style:{textAlign:'right'}},
+                  React.createElement('div', {style:{fontSize:16, fontWeight:700}}, 'CUENTA DE COBRO'),
+                  React.createElement('div', {style:{fontSize:12, color:'var(--muted)'}}, `Fecha: ${getTodayDate()}`)
+                )
+              ),
+
+              React.createElement('div', {style:{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(200px, 1fr))', gap:10, background:'var(--stat-bg)', padding:12, borderRadius:8, marginBottom:14}},
+                React.createElement('div', null,
+                  React.createElement('div', {style:{fontSize:11, color:'var(--muted)'}}, 'BENEFICIARIO / PROFESOR(A)'),
+                  React.createElement('strong', {style:{fontSize:14}}, t.name),
+                  t.telefono && React.createElement('div', {style:{fontSize:12, color:'var(--muted)'}}, `Tel: ${t.telefono}`)
+                ),
+                React.createElement('div', null,
+                  React.createElement('div', {style:{fontSize:11, color:'var(--muted)'}}, 'PERÍODO COBRADO'),
+                  React.createElement('strong', {style:{fontSize:14, textTransform:'capitalize'}}, perNom),
+                  React.createElement('div', {style:{fontSize:12, color:'var(--muted)'}}, `${clasesDictadas.length} clase(s) dictada(s)`)
+                )
+              ),
+
+              clasesDictadas.length === 0 ? React.createElement('div', {style:{padding:'20px 0', textAlign:'center', color:'var(--muted)'}}, 'No hay clases dictadas registradas en este período.') :
+              React.createElement('table', {className:'tbl-cobro'},
+                React.createElement('thead', null,
+                  React.createElement('tr', null,
+                    React.createElement('th', null, 'Fecha'),
+                    React.createElement('th', null, 'Hora'),
+                    React.createElement('th', null, 'Estudiante'),
+                    React.createElement('th', {className:'num'}, 'Horas'),
+                    React.createElement('th', {className:'num'}, 'Tarifa/h'),
+                    React.createElement('th', {className:'num'}, 'Transp.'),
+                    React.createElement('th', {className:'num'}, 'Subtotal')
+                  )
+                ),
+                React.createElement('tbody', null,
+                  clasesDictadas.map(c => {
+                    const h = parseDurationToHours(c.duration);
+                    const tar = pagoProfePorHora(t, c) * 1000;
+                    const trp = c.transporte ? pagoTransporteDe(t) * 1000 : 0;
+                    const sub = (h * tar) + trp;
+                    return React.createElement('tr', {key:c.id},
+                      React.createElement('td', null, c.date),
+                      React.createElement('td', null, c.hour),
+                      React.createElement('td', null, c.student),
+                      React.createElement('td', {className:'num'}, formatHours(h)),
+                      React.createElement('td', {className:'num'}, `${tar.toLocaleString('es-CO')}`),
+                      React.createElement('td', {className:'num'}, trp ? `${trp.toLocaleString('es-CO')}` : '-'),
+                      React.createElement('td', {className:'num', style:{fontWeight:600}}, `${sub.toLocaleString('es-CO')}`)
+                    );
+                  })
+                )
+              ),
+
+              React.createElement('div', {style:{borderTop:'2px solid var(--card-border)', paddingTop:12, marginTop:12}},
+                React.createElement('div', {style:{display:'flex', justifyContent:'space-between', fontSize:13, padding:'3px 0'}},
+                  React.createElement('span', null, 'Total horas dictadas:'),
+                  React.createElement('strong', null, formatHours(totalHoras))
+                ),
+                React.createElement('div', {style:{display:'flex', justifyContent:'space-between', fontSize:13, padding:'3px 0'}},
+                  React.createElement('span', null, 'Subtotal honorarios clases:'),
+                  React.createElement('strong', null, `${totalHonorarios.toLocaleString('es-CO')}`)
+                ),
+                totalTransporte > 0 && React.createElement('div', {style:{display:'flex', justifyContent:'space-between', fontSize:13, padding:'3px 0'}},
+                  React.createElement('span', null, 'Subtotal transporte:'),
+                  React.createElement('strong', null, `${totalTransporte.toLocaleString('es-CO')}`)
+                ),
+                React.createElement('div', {style:{display:'flex', justifyContent:'space-between', fontSize:18, fontWeight:800, padding:'8px 0', borderTop:'1px dashed var(--card-border)', marginTop:6, color:'#1D9E75'}},
+                  React.createElement('span', null, 'TOTAL A PAGAR:'),
+                  React.createElement('span', null, `${totalPagar.toLocaleString('es-CO')}`)
+                )
+              ),
+
+              React.createElement('div', {style:{marginTop:40, paddingTop:20, borderTop:'1px solid #ccc', display:'flex', justifyContent:'space-between', flexWrap:'wrap', gap:20, fontSize:12, color:'var(--muted)'}},
+                React.createElement('div', null,
+                  React.createElement('div', {style:{width:200, borderBottom:'1px solid #000', marginBottom:4}}),
+                  React.createElement('div', null, `Firma: ${t.name}`),
+                  React.createElement('div', null, 'C.C. _____________________')
+                ),
+                React.createElement('div', {style:{textAlign:'right'}},
+                  React.createElement('div', null, 'Aprobado por BLUE'),
+                  React.createElement('div', null, 'Gestión de Clases')
+                )
+              )
+            ),
+
+            React.createElement('div', {className:'no-print', style:{display:'flex', gap:10, marginTop:20, flexWrap:'wrap'}},
+              React.createElement('button', {onClick:copiarResumenWA, className:'primary', style:{flex:1, padding:'10px 14px', fontSize:13, fontWeight:600, display:'flex', alignItems:'center', justifyContent:'center', gap:6, background:'#25D366', color:'#fff', border:'none'}},
+                '📋 Copiar para WhatsApp'
+              ),
+              React.createElement('button', {onClick:()=>window.print(), className:'primary', style:{flex:1, padding:'10px 14px', fontSize:13, fontWeight:600, display:'flex', alignItems:'center', justifyContent:'center', gap:6}},
+                '🖨️ Imprimir / Guardar PDF'
+              ),
+              React.createElement('button', {onClick:()=>setCuentaCobroModal(null), style:{padding:'10px 16px'}}, 'Cerrar')
+            )
+          )
+        );
+      })(),
       toast && React.createElement('div', {className:`toast ${toast.type}`}, toast.msg),
       installBannerEl
     );
@@ -1981,7 +2241,12 @@ function App() {
                       React.createElement('button', {style:{fontSize:12, padding:'2px 8px', background:'transparent', color:'var(--muted)', border:'1px solid var(--card-border)'}, onClick:()=>abrirHistorialPagos(t)}, 'Ver historial →')
                     );
                   })(),
-                  React.createElement('div', {style:{fontSize:11, color:'var(--muted)', marginTop:6}}, '💡 Si te aparece «Al día» pero igual le pagaste, usa el botón igual y escribe el monto a mano.')
+                  React.createElement('div', {style:{fontSize:11, color:'var(--muted)', marginTop:6}}, '💡 Si te aparece «Al día» pero igual le pagaste, usa el botón igual y escribe el monto a mano.'),
+                  React.createElement('button', {
+                    className:'primary',
+                    style:{width:'100%', marginTop:10, padding:'10px 14px', fontSize:14, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', gap:8, background:'linear-gradient(90deg, #1D9E75, #2563eb)', border:'none', borderRadius:10, color:'#fff', cursor:'pointer'},
+                    onClick:()=>{ setCuentaCobroModal(t); setCuentaCobroMes(tProfileMonth.toISOString().slice(0, 7)); }
+                  }, '📄 Generar Cuenta de Cobro (PDF / WhatsApp)')
                 );
               })()
             )
@@ -2228,31 +2493,29 @@ function App() {
               const costoMes = costoEstudianteMes(s, yyyymm);
               const pagoMes = esMesPagado(s, yyyymm);
               // Deuda acumulada: todos los meses con clases dictadas sin pagar
-              const mesesConClases = [...new Set(clasesDictadas.map(c => (c.date||'').slice(0,7)))].
-                filter(m => m && /^\d{4}-\d{2}$/.test(m) && !esMesPagado(s, m));
-              let deuda=0;
-              if (pagoMes) {
-                mesesConClases.forEach(m => { if (m !== yyyymm) deuda += costoEstudianteMes(s, m); });
-              } else {
-                mesesConClases.forEach(m => deuda += costoEstudianteMes(s, m));
-              }
+              const mesesConClases = [...new Set(clasesDictadas.map(c => (c.date||'').slice(0,7)))].filter(m => m && /^\d{4}-\d{2}$/.test(m));
+              const mesesSinPagar = mesesConClases.filter(m => !esMesPagado(s, m));
+              let deuda = mesesSinPagar.reduce((acc, m) => acc + costoEstudianteMes(s, m), 0);
               granDeuda += deuda;
               return React.createElement('div', {key:s.id, className:'card', style:{marginBottom:10}},
                 React.createElement('div', {style:{display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:8}},
                   React.createElement('div', null,
                     React.createElement('strong', null, s.name),
-                    React.createElement('div', {style:{fontSize:12, color:'var(--muted)'}}, `${clasesDictadas.length} clase(s) · ${formatHours(horasTotales)} · $${s.price.toLocaleString()}/h`)
+                    React.createElement('div', {style:{fontSize:12, color:'var(--muted)'}}, `${clasesDictadas.length} clase(s) · ${formatHours(horasTotales)} · ${s.price.toLocaleString()}/h`)
                   ),
-                  React.createElement('div', {style:{fontWeight:'bold', fontSize:16}}, `$${total.toLocaleString(undefined, {maximumFractionDigits:0})}`)
+                  React.createElement('div', {style:{fontWeight:'bold', fontSize:16}}, `${total.toLocaleString(undefined, {maximumFractionDigits:0})}`)
                 ),
                 React.createElement('div', {style:{marginTop:8, borderTop:'1px solid var(--card-border)', paddingTop:8, display:'flex', alignItems:'center', gap:10, flexWrap:'wrap'}},
                   React.createElement('div', {style:{fontSize:13}}, `${(yyyymmNom.charAt(0).toUpperCase()+yyyymmNom.slice(1))}: `,
-                    React.createElement('strong', {style:{color:'#1D9E75'}}, `$${costoMes.toLocaleString(undefined,{maximumFractionDigits:0})}`)
+                    React.createElement('strong', {style:{color:'#1D9E75'}}, `${costoMes.toLocaleString(undefined,{maximumFractionDigits:0})}`)
                   ),
-                  React.createElement('button', {onClick:()=>toggleMesPagado(s, yyyymm), style:{padding:'6px 12px', background: pagoMes ? '#e5e7eb' : '#1D9E75', color: pagoMes ? '#374151' : '#fff', border:'none', borderRadius:8}},
+                  React.createElement('button', {onClick:()=>toggleMesPagado(s, yyyymm), style:{padding:'6px 12px', background: pagoMes ? '#e5e7eb' : '#1D9E75', color: pagoMes ? '#374151' : '#fff', border:'none', borderRadius:8, cursor:'pointer'}},
                     pagoMes ? '✅ Mes pagado (tocar para pendiente)' : '💰 Marcar mes como pagado'
                   ),
-                  deuda > 0 && React.createElement('span', {style:{fontSize:13, color:'#b91c1c', fontWeight:600}}, `Adeuda: $${deuda.toLocaleString(undefined, {maximumFractionDigits:0})}`),
+                  deuda > 0 && React.createElement('div', {style:{display:'flex', alignItems:'center', gap:6, flexWrap:'wrap'}},
+                    React.createElement('span', {style:{fontSize:13, color:'#b91c1c', fontWeight:600}}, `Adeuda: ${deuda.toLocaleString(undefined, {maximumFractionDigits:0})}${mesesSinPagar.length ? ` (${mesesSinPagar.join(', ')})` : ''}`),
+                    React.createElement('button', {onClick:()=>saldarDeudaEstudiante(s), style:{padding:'3px 8px', fontSize:11, background:'#fee2e2', color:'#b91c1c', border:'1px solid #fecaca', borderRadius:6, cursor:'pointer', fontWeight:600}}, '✓ Saldar toda la deuda')
+                  ),
                   deuda === 0 && React.createElement('span', {style:{fontSize:13, color:'#1D9E75', fontWeight:600}}, '✓ Al día')
                 )
               );
@@ -2294,8 +2557,11 @@ function App() {
                     mine.slice(0,8).map(c => `${c.date.slice(8,10)} ${c.hour}`).join(' · '))
                 ),
                 React.createElement('div', {style:{textAlign:'right'}},
-                  React.createElement('div', {style:{fontWeight:'bold', fontSize:16}}, `$${costo.toLocaleString(undefined, {maximumFractionDigits:0})}`),
-                  React.createElement('div', {style:{fontSize:12, color: pago ? '#1D9E75' : '#b91c1c', fontWeight:600}}, pago ? '✓ Pagado' : 'Pendiente')
+                  React.createElement('div', {style:{fontWeight:'bold', fontSize:16}}, `${costo.toLocaleString(undefined, {maximumFractionDigits:0})}`),
+                  React.createElement('button', {
+                    onClick:()=>toggleMesPagado(s, yyyymm),
+                    style:{marginTop:4, padding:'4px 10px', fontSize:11, background: pago ? '#e5e7eb' : '#1D9E75', color: pago ? '#374151' : '#fff', border:'none', borderRadius:6, cursor:'pointer', fontWeight:600}
+                  }, pago ? '✅ Pagado (tocar para pendiente)' : '💰 Marcar como pagado')
                 )
               )
             );
@@ -2352,15 +2618,18 @@ function App() {
           React.createElement('div', {className:'cal-grid'},
             cells.map((d, i) => {
               if (d === null) return React.createElement('div', {key:'blank'+i});
+              const dateStr = `${year}-${pad(month+1)}-${pad(d)}`;
+              const holiday = COLOMBIA_HOLIDAYS[dateStr];
               const dayClasses = classesForDay(d);
               const isSelected = calSelectedDay === d;
               const dotTeachers = [...new Set(dayClasses.map(c => c.teacherId).filter(Boolean))];
               return React.createElement('div', {
                 key:d,
                 onClick:()=>setCalSelectedDay(isSelected ? null : d),
-                className: `cal-cell ${dayClasses.length>0 ? 'has-classes' : ''} ${isSelected?'selected':''}`
+                className: `cal-cell ${holiday ? 'is-holiday' : ''} ${dayClasses.length>0 ? 'has-classes' : ''} ${isSelected?'selected':''}`
               },
-                React.createElement('div', {className:'cal-daynum'}, d),
+                React.createElement('div', {className:'cal-daynum', style: holiday ? {color:'#dc2626', fontWeight:700} : {}}, d),
+                holiday && React.createElement('div', {className:'cal-holiday-tag', title:holiday}, '🇨🇴 ' + holiday),
                 dayClasses.length>0 && React.createElement('div', null, `${dayClasses.length} clase${dayClasses.length>1?'s':''}`),
                 dotTeachers.length > 0 && React.createElement('div', {className:'cal-dots'},
                   dotTeachers.slice(0, 5).map(tid => {
@@ -2371,9 +2640,13 @@ function App() {
               );
             })
           ),
-          calSelectedDay && React.createElement('div', {className:'card', style:{marginTop:14}},
-            React.createElement('div', {className:'row', style:{justifyContent:'space-between', marginBottom:6, flexWrap:'wrap'}},
-              React.createElement('h3', null, `${calSelectedDay} de ${calMonth.toLocaleDateString('es-ES',{month:'long'})}`),
+          calSelectedDay && (() => {
+            const selDateStr = `${year}-${pad(month+1)}-${pad(calSelectedDay)}`;
+            const selHoliday = COLOMBIA_HOLIDAYS[selDateStr];
+            return React.createElement('div', {className:'card', style:{marginTop:14}},
+              selHoliday && React.createElement('div', {style:{background:'#fee2e2', border:'1px solid #fecaca', color:'#991b1b', padding:'6px 10px', borderRadius:8, marginBottom:8, fontSize:13, fontWeight:600}}, `🇨🇴 Día festivo en Colombia: ${selHoliday}`),
+              React.createElement('div', {className:'row', style:{justifyContent:'space-between', marginBottom:6, flexWrap:'wrap'}},
+                React.createElement('h3', null, `${calSelectedDay} de ${calMonth.toLocaleDateString('es-ES',{month:'long'})}`),
               React.createElement('button', {className:'primary', onClick:()=>{ const dStr = `${year}-${pad(month+1)}-${pad(calSelectedDay)}`; setNewCls({...newCls, date:dStr, teacherId:null}); setTab('clases'); }}, '+ Agregar clase este día')
             ),
             selectedClasses.length === 0 && React.createElement('div', null, 'No hay clases este día.'),
@@ -2417,7 +2690,8 @@ function App() {
                 )
               );
             })
-          )
+            );
+          })()
         );
       })(),
       tab === 'historial' && (() => {
